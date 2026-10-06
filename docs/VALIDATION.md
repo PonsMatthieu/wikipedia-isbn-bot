@@ -75,4 +75,23 @@ Deux causes ont été reproduites par des appels réels depuis Toolforge :
 
 La base existante a été sauvegardée via l'API SQLite `backup` avant intervention : `backups/state-pre-catalogues-20261006T214822Z.sqlite3`. Son `PRAGMA quick_check` est `ok` ; elle contient 196 événements, 96 cas et zéro édition à cet instant. Aucune réinitialisation ni suppression des données n'a été effectuée.
 
-Tests locaux sous Python 3.13.15 : **107 tests réussis et 12 sous-tests réussis**. Les nouvelles régressions couvrent les réponses observées, la distinction panne/absence, l'isolation du cache, la conversion ISBN-10/13 et la propagation des notices BnF partielles jusqu'au rapport. La reconstruction et le pilote de cette nouvelle correction restent à vérifier après publication.
+Tests locaux sous Python 3.13.15 : **107 tests réussis et 12 sous-tests réussis**. Les nouvelles régressions couvrent les réponses observées, la distinction panne/absence, l'isolation du cache, la conversion ISBN-10/13 et la propagation des notices BnF partielles jusqu'au rapport.
+
+### Validation de la correction sur Toolforge
+
+La correction de code `9a8833758ad2a315f446798f264146e4f71abf3a` est publiée et déployée. Build `mesange-isbn-bot-buildpacks-pipelinerun-hb68r`, terminé avec succès le 6 octobre à 21:54:21 UTC. Image : `tools-harbor.wmcloud.org/tool-mesange-isbn-bot/tool-mesange-isbn-bot:latest`, digest `sha256:075c90af925a6d8bdcda829b72cb3eb94e0f08ea7320c1c9d591ab2e243cd7d4`. Les empreintes SHA-256 des trois modules HTTP/BnF/Sudoc chargés dans le conteneur correspondent exactement aux fichiers publiés.
+
+| Contrôle réel | Résultat |
+|---|---|
+| `isbn-catalogue-check` | Succeeded ; protections dry-run et chemin de base vérifiés |
+| Sudoc, ISBN témoin `9782070360024` | Trois notices RDF obtenues |
+| Sudoc, ISBN sans notice `9785935298258` | Résultat vide normal, aucune erreur |
+| BnF, titre `Le cheval d'orgueil` | 19 notices conservées ; diagnostic SRU 131 maintenu dans l'avertissement |
+| `isbn-pilot-v3`, `scan-isbn --process-existing` | Succeeded à 21:58:27 UTC ; 20 articles, 21 cas, zéro échec et zéro édition |
+| `isbn-retry-catalogues`, `scan-isbn` | Succeeded à 22:01:15 UTC ; 20 articles, 36 cas, zéro échec et zéro édition |
+
+Pour reprendre les 14 anciens événements `FAILED` portant `last_error=catalogue-search-incomplete`, leur `next_retry` a été avancé après acquisition du verrou applicatif, sans remise à zéro du compteur de tentatives. Une seconde sauvegarde cohérente précède cette intervention : `backups/state-pre-retry-20261006T215911Z.sqlite3`. Les 14 événements sont maintenant traités ; les six autres articles de ce passage étaient déjà en attente.
+
+Contrôle final de la base : `quick_check=ok`, aucune violation de clé étrangère, tous les 196 identifiants d'événements et les 96 identifiants de cas initiaux sont conservés, ainsi que le timestamp de référence. La base contient désormais 127 cas, zéro événement `FAILED`, zéro `ANALYSING` et zéro édition. Quatre articles restent en file `NEW` pour la veille ; 95 articles de la liste initiale restent en `BASELINE`. Les résultats sans candidat nécessitent toujours un examen bibliographique.
+
+Le job horaire est actif avec `35 * * * *`, `concurrencyPolicy=Forbid`, image `latest` et `imagePullPolicy=Always` : il chargera l'image corrigée. Les logs des deux passages de validation sont conservés dans `isbn-pilot-v3.out/.err` et `isbn-retry-catalogues.out/.err` sous le compte outil. Les rapports JSON/HTML ont été régénérés dans `isbn-bot/reports/`. Aucun appel de publication Wikipédia n'a été effectué.
