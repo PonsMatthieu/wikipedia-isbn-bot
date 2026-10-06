@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<srw:searchRetrieveResponse xmlns:srw="http://www.loc.gov/zing/srw/">
+ <srw:numberOfRecords>1</srw:numberOfRecords><srw:records><srw:record><srw:recordData>
+ <record xmlns="info:lc/xmlns/marcxchange-v1">
+  <controlfield tag="001">DEMO-BNF</controlfield>
+  <controlfield tag="003">https://example.org/notices/DEMO-BNF</controlfield>
+  <datafield tag="010"><subfield code="a">978-0-306-40615-7 (broché)</subfield><subfield code="z">9780306406158</subfield></datafield>
+  <datafield tag="200"><subfield code="a">Livre test</subfield></datafield>
+  <datafield tag="210"><subfield code="c">Éditeur test</subfield><subfield code="d">2004</subfield></datafield>
+  <datafield tag="700"><subfield code="a">Exemple</subfield><subfield code="b">Jane</subfield></datafield>
+ </record></srw:recordData></srw:record></srw:records>
+</srw:searchRetrieveResponse>

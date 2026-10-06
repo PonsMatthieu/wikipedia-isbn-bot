@@ -1,0 +1,6 @@
+# Versions utilisées lors des tests de cette livraison.
+requests==2.34.2
+mwparserfromhell==0.7.2
+defusedxml==0.7.1
+python-dotenv==1.2.4
+.

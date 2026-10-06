@@ -1,0 +1,24 @@
+== Objet ==
+Ce compte de bot est destiné à assister la vérification des ISBN invalides dans les références de Wikipédia en français.
+
+'''Opérateur :''' [[Utilisateur:Mésange Futée|Mésange_Futée]].
+
+'''État initial :''' analyse en lecture seule. La réception du logiciel n'implique ni l'attribution du statut bot ni l'autorisation de modifications.
+
+== Fonctionnement ==
+* Surveillance horaire de [[:Catégorie:Page avec ISBN invalide]], dans l'espace principal.
+* Recherche bibliographique dans des catalogues, dont la BnF, le Sudoc et Open Library.
+* Conservation des sources et du diff proposé ; validation humaine avant toute publication dans la première version.
+* Aucune correction fondée uniquement sur le recalcul d'une clé ISBN.
+* Abandon de la proposition si la révision de l'article a changé.
+
+== Exclusions ==
+Les éditions incertaines, les ISBN explicitement signalés comme erronés dans une notice, les ISBN multiples, les identifiants de périodiques ou de musique et les champs structurés nécessitent une intervention manuelle.
+
+== Arrêt et contact ==
+Le logiciel respecte les modèles de refus d'intervention des bots. L'opérateur peut créer un fichier STOP et le logiciel arrête ses écritures sur blocage du compte ou incident de publication.
+
+Pour signaler un problème : [[Discussion utilisateur:Mésange Futée]].
+
+== Code et autorisation ==
+Lien du dépôt public et lien de la demande de statut à ajouter après leur création effective.

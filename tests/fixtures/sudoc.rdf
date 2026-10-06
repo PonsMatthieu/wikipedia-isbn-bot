@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:bibo="http://purl.org/ontology/bibo/" xmlns:foaf="http://xmlns.com/foaf/0.1/">
+ <rdf:Description rdf:about="http://www.sudoc.fr/000000001/id">
+  <dc:title>Livre test</dc:title><dc:creator rdf:resource="http://example.org/person/jane"/>
+  <dc:publisher>Éditeur test</dc:publisher><dc:date>2004</dc:date><bibo:isbn13>9780306406157</bibo:isbn13>
+ </rdf:Description>
+ <foaf:Person rdf:about="http://example.org/person/jane"><foaf:name>Jane Exemple</foaf:name></foaf:Person>
+ <rdf:Description rdf:about="http://example.org/other-work"><dc:title>Autre œuvre</dc:title><bibo:isbn13>9780743273565</bibo:isbn13></rdf:Description>
+</rdf:RDF>

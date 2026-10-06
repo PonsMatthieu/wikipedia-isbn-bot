@@ -1,0 +1,98 @@
+{
+  "generated_at": "2026-10-05T09:40:20+00:00",
+  "demo": true,
+  "stats": {
+    "events": {
+      "NEEDS_REVIEW": 1
+    },
+    "findings": {
+      "NEEDS_REVIEW": 1
+    },
+    "last_success": null,
+    "write_halted": null
+  },
+  "cases": [
+    {
+      "id": 1,
+      "status": "NEEDS_REVIEW",
+      "page": {
+        "categories": [
+          "Catégorie:Page avec ISBN invalide"
+        ],
+        "namespace": 0,
+        "page_id": 101,
+        "revision_id": 501,
+        "start_timestamp": "2026-10-05T09:00:00Z",
+        "timestamp": "2026-10-05T09:00:00Z",
+        "title": "Article de démonstration"
+      },
+      "finding": {
+        "candidate_isbn": "9780306406157",
+        "candidates": [
+          {
+            "evidence": [
+              {
+                "matched_isbn": "9780306406157",
+                "mismatches": [],
+                "record": {
+                  "authors": [
+                    "Élodie Exemple"
+                  ],
+                  "edition": "",
+                  "invalid_isbns": [],
+                  "isbns": [
+                    "9780306406157"
+                  ],
+                  "language": "",
+                  "publisher": "Éditions Démo",
+                  "record_id": "DEMO-BNF-1",
+                  "source": "bnf",
+                  "title": "Le Livre Démo",
+                  "translator": "",
+                  "url": "https://example.org/notices/DEMO-BNF-1",
+                  "volume": "",
+                  "year": "2004"
+                },
+                "score": 0.9957
+              }
+            ],
+            "isbn": "9780306406157",
+            "mismatches": [],
+            "reasons": [
+              "ISBN explicitement présent dans : bnf"
+            ],
+            "score": 0.9957
+          }
+        ],
+        "error_type": "BAD_CHECKSUM",
+        "field": {
+          "context": {
+            "authors": [
+              "Élodie Exemple"
+            ],
+            "edition": "",
+            "language": "",
+            "publisher": "Éditions Démo",
+            "title": "Le Livre Démo",
+            "translator": "",
+            "volume": "",
+            "year": "2004"
+          },
+          "editable": true,
+          "parameter_index": 4,
+          "parameter_name": "isbn",
+          "raw_value": "978-0-306-40615-8 ",
+          "restriction": "",
+          "template_index": 0,
+          "template_name": "ouvrage"
+        },
+        "proposed_value": "9780306406157",
+        "reasons": [],
+        "source_errors": [],
+        "status": "NEEDS_REVIEW"
+      },
+      "diff": "--- Article de démonstration (avant)\n+++ Article de démonstration (proposition)\n@@ -1,2 +1,2 @@\n Un exemple fictif pour tester le parcours.\n-<ref>{{Ouvrage |auteur=Élodie Exemple |titre=Le Livre Démo |éditeur=Éditions Démo |année=2004 |isbn=978-0-306-40615-8 }}</ref>\n+<ref>{{Ouvrage |auteur=Élodie Exemple |titre=Le Livre Démo |éditeur=Éditions Démo |année=2004 |isbn=9780306406157 }}</ref>\n",
+      "approved_by": null
+    }
+  ]
+}
