@@ -9,7 +9,10 @@ from .state import State
 
 
 class HttpError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, status_code: int | None = None, kind: str | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.kind = kind
 
 
 class Transport:
@@ -32,7 +35,7 @@ class Transport:
             except requests.RequestException as exc:
                 if attempt + 1 == attempts:
                     # Ne pas exposer l'URL : elle peut contenir une clé API.
-                    raise HttpError(type(exc).__name__ + " pendant une requête HTTP") from None
+                    raise HttpError(type(exc).__name__ + " pendant une requête HTTP", kind=type(exc).__name__) from None
                 self.sleep(min(2 ** (attempt + 1), 32))
                 continue
             if response.status_code in {429, 500, 502, 503, 504} and attempt + 1 < attempts:
@@ -43,7 +46,7 @@ class Transport:
                 self.sleep(min(max(retry_after, 2 ** (attempt + 1)), 60))
                 continue
             if response.status_code >= 400:
-                raise HttpError(f"HTTP {response.status_code}")
+                raise HttpError(f"HTTP {response.status_code}", status_code=response.status_code)
             return response
         raise HttpError("Nombre maximal de tentatives atteint")
 

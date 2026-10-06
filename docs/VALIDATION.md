@@ -49,3 +49,17 @@ python3 -m unittest discover -s tests -p test_toolforge_start.py -v
 ```
 
 Les résultats des 75 tests du bot ci-dessus concernent la livraison du 5 octobre. Le code Python du bot n'a pas changé lors de cette mise à jour. Les tests de publication utilisent des réponses simulées et aucune correction réelle n'a été publiée.
+
+## Incident du pilote Toolforge, 6 octobre 2026
+
+Résultats fournis par l'opérateur : 196 articles dans la catégorie, 20 analysés, 33 cas enregistrés, 12 recherches incomplètes et zéro édition. Le rapport cumulatif compte 33 erreurs Sudoc `HttpError` et deux erreurs BnF `ValueError`. Ces types seuls ne précisent pas le code HTTP, l'étape Sudoc en cause ni le diagnostic BnF. L'accès SSH et l'exécution de l'image sont donc confirmés par ce retour ; l'accès complet aux catalogues reste à contrôler.
+
+La correction conserve les notices obtenues avant une erreur dans les recherches BnF et Sudoc. Les erreurs restent visibles dans le rapport et sont maintenant journalisées avec le code HTTP ou SRU disponible, sans message fournisseur brut ni URL. Les recherches sans candidat après une erreur gardent leur statut d'échec et leur délai de reprise. Un résultat Sudoc XML vide reste un résultat normal ; une erreur HTTP 404 reste signalée.
+
+Contrôle local sous Python 3.12.14 : **90 tests réussis et 12 sous-tests réussis**, dont dix nouvelles régressions couvrant les résultats partiels, les erreurs HTTP/SRU, les journaux, les réponses vides et la conservation des échecs sans candidat.
+
+```bash
+python -m pytest -q
+```
+
+La correction doit encore être reconstruite dans l'image Toolforge et vérifiée avec un nouveau pilote. Les erreurs externes des catalogues ne sont pas considérées comme résolues par les tests simulés.

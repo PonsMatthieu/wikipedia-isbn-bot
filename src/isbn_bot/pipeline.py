@@ -25,6 +25,9 @@ class Pipeline:
             if self.settings.stop_file.exists():
                 raise RuntimeError("Fichier STOP présent")
             finding = self.analyzer.analyze(field)
+            if finding.source_errors:
+                log.warning("Recherche catalogue partielle pour page_id=%s : %s",
+                            page.page_id, "; ".join(finding.source_errors))
             retry_needed |= bool(finding.source_errors and not finding.candidates)
             diff = ""
             if finding.proposed_value:

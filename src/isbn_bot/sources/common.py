@@ -1,6 +1,39 @@
 import re
 
 from ..isbn import extracted_tokens, normalize_isbn, valid_isbn
+from ..http import HttpError
+from ..models import Record
+
+
+class SruDiagnosticError(ValueError):
+    def __init__(self, codes=()):
+        self.codes = tuple(sorted(set(codes)))
+        super().__init__("Diagnostic SRU BnF : requête ou service indisponible")
+
+
+def safe_source_error(exc: Exception) -> str:
+    """Détails structurés seulement : jamais une URL ni un message fournisseur brut."""
+    if isinstance(exc, PartialSearchError):
+        return "Recherche partielle : " + "; ".join(exc.errors)
+    if isinstance(exc, HttpError):
+        if isinstance(exc.status_code, int) and 100 <= exc.status_code <= 599:
+            return f"HttpError (HTTP {exc.status_code})"
+        if exc.kind in {"Timeout", "ConnectTimeout", "ReadTimeout", "ConnectionError", "SSLError",
+                        "ProxyError", "TooManyRedirects", "ChunkedEncodingError", "ContentDecodingError"}:
+            return f"HttpError ({exc.kind})"
+        return "HttpError"
+    if isinstance(exc, SruDiagnosticError):
+        codes = ",".join(str(c) for c in exc.codes) or "inconnu"
+        return f"SruDiagnosticError (SRU {codes})"
+    return type(exc).__name__
+
+
+class PartialSearchError(RuntimeError):
+    """Une recherche incomplète conserve ses notices et ses erreurs contrôlées."""
+    def __init__(self, records: list[Record], errors: list[str]):
+        super().__init__("; ".join(errors))
+        self.records = records
+        self.errors = list(dict.fromkeys(errors))
 
 
 def local_name(tag: str) -> str:

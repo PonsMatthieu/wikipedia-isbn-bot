@@ -5,6 +5,7 @@ from isbn_bot.models import Context
 from isbn_bot.sources.bnf import BnfSource
 from isbn_bot.sources.openlibrary import OpenLibrarySource
 from isbn_bot.sources.sudoc import SudocSource
+from isbn_bot.sources.common import safe_source_error
 from isbn_bot.wiki import WikiClient
 
 
@@ -23,7 +24,7 @@ def main():
             print(f"{name}: OK ({call()} résultat(s))")
         except Exception as exc:
             failures += 1
-            print(f"{name}: ÉCHEC ({type(exc).__name__})")
+            print(f"{name}: ÉCHEC ({safe_source_error(exc)})")
     return int(failures > 0)
 
 

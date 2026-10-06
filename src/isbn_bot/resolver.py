@@ -5,6 +5,7 @@ from difflib import SequenceMatcher
 
 from .isbn import candidate_seeds, classify, isbn13, normalize_isbn, valid_isbn
 from .models import Candidate, Finding, Record
+from .sources.common import PartialSearchError, safe_source_error
 
 
 def normalized_text(text: str) -> str:
@@ -111,9 +112,12 @@ class Analyzer:
                 source_seeds = list(dict.fromkeys(seeds + [c.isbn for c in preliminary if c.score >= 0.7]))[:5]
             try:
                 records.extend(source.search(field.context, source_seeds, field.raw_value))
+            except PartialSearchError as exc:
+                records.extend(exc.records)
+                errors.extend(f"{source.name}: {error}" for error in exc.errors)
             except Exception as exc:
                 # Ni URL ni corps d'erreur fournisseur : risque de contenir une clé.
-                errors.append(f"{source.name}: {type(exc).__name__}")
+                errors.append(f"{source.name}: {safe_source_error(exc)}")
         candidates = rank(field, records)
         reasons = []
         if any(normalize_isbn(field.raw_value) in r.invalid_isbns for r in records):

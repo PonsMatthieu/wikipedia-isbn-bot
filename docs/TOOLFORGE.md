@@ -10,7 +10,7 @@ Guide préparé à partir de la documentation officielle consultée les 5 et 6 o
 - [Demande Toolforge n° 2391](https://toolsadmin.wikimedia.org/tools/membership/status/2391) : **Approved**.
 - [Compte outil mesange-isbn-bot](https://toolsadmin.wikimedia.org/tools/id/mesange-isbn-bot) : **créé**, licence MIT, mainteneur Mésange Futée.
 
-L'installation du code et le lancement des jobs restent à faire. Ajouter sa **clé SSH publique** dans la console ; aucune clé n'était enregistrée au moment de cette vérification. Conserver la clé privée sur son ordinateur.
+L'opérateur a réussi la connexion SSH et le lancement d'un pilote le 6 octobre 2026. La capture du pilote montre 20 articles analysés, 33 cas enregistrés et 12 recherches incomplètes. La mise à jour décrite dans `VALIDATION.md` reste à reconstruire et vérifier dans Toolforge. Pour une nouvelle installation, ajouter sa **clé SSH publique** dans la console et conserver la clé privée sur son ordinateur.
 
 L'inscription indique que l'adresse du compte développeur sera visible publiquement. Choisir une adresse adaptée à cet usage ; aucune adresse personnelle n'est préremplie dans le projet.
 
@@ -106,8 +106,10 @@ toolforge jobs run isbn-first --image tool-mesange-isbn-bot/tool-mesange-isbn-bo
 Le premier snapshot constitue la liste de référence. Pour un petit pilote sur des articles existants :
 
 ```bash
-toolforge jobs run isbn-pilot --image tool-mesange-isbn-bot/tool-mesange-isbn-bot:latest --command 'scan-isbn --process-existing' --mount all --wait
+toolforge jobs run isbn-pilot --image tool-mesange-isbn-bot/tool-mesange-isbn-bot:latest --command 'scan-isbn --process-existing' --mount all --filelog --wait 3300
 ```
+
+Si le pilote est marqué `Failed`, lire ses compteurs et les fichiers `/data/project/mesange-isbn-bot/isbn-pilot.out` et `isbn-pilot.err`. Une recherche incomplète peut provoquer le code de sortie 1 après une analyse terminée. Voir `OPERATIONS.md` pour l'interprétation et la reprise.
 
 Puis planifier la surveillance :
 
@@ -182,4 +184,4 @@ Ne pas fournir les secrets comme arguments de commande. Les nouveaux jobs prendr
 
 Activer la publication seulement après le parcours communautaire de `GOUVERNANCE.md`. `run` reste une commande d'analyse même lorsque l'écriture est activée : la publication exige un job explicite `manage-isbn apply ID --confirm`.
 
-Le compte développeur, l'association Phabricator, l'adhésion Toolforge et le compte outil ont été vérifiés et créés. Le code est publié sur GitHub. L'accès SSH, le build distant, les jobs et l'envoi SMTP restent à configurer. La publication du dépôt ne lance aucun job sur Toolforge.
+Le compte développeur, l'association Phabricator, l'adhésion Toolforge et le compte outil ont été vérifiés et créés. Le code est publié sur GitHub. L'opérateur a lancé l'image sur Toolforge et fourni les résultats du pilote. La correction des recherches partielles doit encore être reconstruite et vérifiée sur Toolforge ; l'état de la planification horaire et le SMTP restent à vérifier. La publication du dépôt ne lance aucun job sur Toolforge.

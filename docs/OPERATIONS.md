@@ -12,6 +12,26 @@ Un article déjà examiné n'est pas systématiquement réanalysé à chaque mod
 
 Les lectures HTTP retentent les erreurs réseau, 429 et certaines erreurs serveur avec un délai borné. Les erreurs MediaWiki `maxlag` de lecture sont aussi retentées. Les éditions ne sont jamais soumises deux fois automatiquement.
 
+## Pilote Toolforge marqué Failed
+
+Le job renvoie le code 1 lorsqu'au moins un article reste sans candidat après une erreur de catalogue. Les articles traités et leurs propositions restent dans le rapport. Les compteurs `analysed`, `failures` et `proposals` permettent de distinguer ce résultat partiel d'un arrêt avant analyse.
+
+Les journaux indiquent le catalogue, l'étape (`isbn2ppn`, `RDF` ou `SRU`) et le code HTTP ou SRU disponible. Les notices déjà obtenues dans une recherche BnF ou Sudoc restent utilisables si une requête suivante échoue ; la recherche conserve aussi son avertissement. Un résultat Sudoc XML vide est une absence de notice normale. Un HTTP 404 reste une erreur de requête visible et n'est pas assimilé automatiquement à une absence de notice.
+
+Sur le bastion Toolforge, `isbn-bot` n'est pas installé par le build. Exécuter les commandes applicatives dans un job de l'image : `manage-isbn status`, `manage-isbn export` ou `scan-isbn --process-existing`.
+
+Pour un pilote dont les journaux doivent rester consultables après la fin du job :
+
+```bash
+toolforge jobs run isbn-pilot-check \
+  --image tool-mesange-isbn-bot/tool-mesange-isbn-bot:latest \
+  --command 'scan-isbn --process-existing' \
+  --mount all --filelog --wait 3300
+tail -n 80 /data/project/mesange-isbn-bot/isbn-pilot-check.out /data/project/mesange-isbn-bot/isbn-pilot-check.err
+```
+
+Le rapport est dans `/data/project/mesange-isbn-bot/isbn-bot/reports/`. Les erreurs enregistrées dans les anciens cas conservent leur ancien format ; une nouvelle analyse produit les détails supplémentaires. La catégorie, les événements, les propositions et les rapports sont conservés lors d'une reconstruction de l'image.
+
 Une analyse de page échouée est réessayée lors d'un run ultérieur, jusqu'à quatre tentatives, avec un délai croissant. Les résultats sans candidat et les résultats incomplets restent visibles pour réexamen.
 
 ## Arrêt

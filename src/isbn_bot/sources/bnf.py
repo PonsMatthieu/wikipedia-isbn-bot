@@ -1,8 +1,11 @@
+import re
+
 from defusedxml import ElementTree as ET
 
+from ..http import HttpError
 from ..isbn import isbn10, isbn13, normalize_isbn
 from ..models import Record
-from .common import cql_quote, local_name, valid_identifiers, year
+from .common import PartialSearchError, SruDiagnosticError, cql_quote, local_name, safe_source_error, valid_identifiers, year
 
 
 class BnfSource:
@@ -27,21 +30,40 @@ class BnfSource:
             queries.append("bib.isbn all " + cql_quote(suspect))
         if context.title:
             queries.append("bib.title all " + cql_quote(context.title))
-        records = {}
+        records, errors = {}, []
         for query in queries[:8]:
-            xml = self.http.text(self.endpoint, {
-                "version": "1.2", "operation": "searchRetrieve", "query": query,
-                "recordSchema": "unimarcxchange", "maximumRecords": "20",
-            })
-            for record in parse_bnf(xml):
-                records[record.record_id] = record
+            try:
+                xml = self.http.text(self.endpoint, {
+                    "version": "1.2", "operation": "searchRetrieve", "query": query,
+                    "recordSchema": "unimarcxchange", "maximumRecords": "20",
+                })
+                for record in parse_bnf(xml):
+                    records[record.record_id] = record
+            except Exception as exc:
+                kind = "ISBN" if query.startswith("bib.isbn") else "titre"
+                errors.append(f"SRU {kind}: {safe_source_error(exc)}")
+                # Le transport a déjà retenté les erreurs réseau : ne pas multiplier
+                # les appels à un service indisponible. Un diagnostic CQL reste local
+                # à sa requête et permet de poursuivre les autres recherches.
+                if isinstance(exc, HttpError):
+                    break
+        if errors:
+            raise PartialSearchError(list(records.values()), errors)
         return list(records.values())
 
 
 def parse_bnf(xml: str) -> list[Record]:
     root = ET.fromstring(xml)
-    if any(local_name(e.tag) == "diagnostic" for e in root.iter()):
-        raise ValueError("Diagnostic SRU BnF : requête ou service indisponible")
+    diagnostics = [e for e in root.iter() if local_name(e.tag) == "diagnostic"]
+    if diagnostics:
+        codes = []
+        for diagnostic in diagnostics:
+            for element in diagnostic:
+                if local_name(element.tag) == "uri":
+                    match = re.fullmatch(r"info:srw/diagnostic/\d+/(\d{1,5})", (element.text or "").strip())
+                    if match:
+                        codes.append(int(match[1]))
+        raise SruDiagnosticError(codes)
     records = []
     for node in root.iter():
         # Évite de confondre l'enveloppe SRU avec le record MARC interne.

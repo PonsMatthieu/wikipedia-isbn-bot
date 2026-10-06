@@ -2,8 +2,9 @@ import re
 
 from defusedxml import ElementTree as ET
 
+from ..http import HttpError
 from ..models import Record
-from .common import local_name, valid_identifiers, year
+from .common import PartialSearchError, local_name, safe_source_error, valid_identifiers, year
 
 
 _RDF = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}"
@@ -16,19 +17,35 @@ class SudocSource:
         self.http = transport
 
     def search(self, context, seeds, raw_isbn="") -> list[Record]:
-        records = {}
+        records, errors = {}, []
         # isbn2ppn ne fait pas de recherche libre titre/auteur. Les ISBN découvertes
         # dans les autres catalogues sont également corroborées via ce service.
         for seed in list(dict.fromkeys(seeds))[:5]:
-            xml = self.http.text("https://www.sudoc.fr/services/isbn2ppn/" + seed)
-            root = ET.fromstring(xml)
+            try:
+                xml = self.http.text("https://www.sudoc.fr/services/isbn2ppn/" + seed)
+                root = ET.fromstring(xml)
+                if local_name(root.tag) != "sudoc":
+                    raise ValueError("Réponse isbn2ppn Sudoc invalide")
+            except Exception as exc:
+                errors.append("isbn2ppn: " + safe_source_error(exc))
+                if isinstance(exc, HttpError) and exc.status_code not in {404, 410}:
+                    break
+                continue
             ppns = [(e.text or "").strip() for e in root.iter() if local_name(e.tag).lower() == "ppn"]
             for ppn in ppns[:3]:
                 if not re.fullmatch(r"\d{8}[\dXx]", ppn):
                     continue
-                record = parse_sudoc(self.http.text("https://www.sudoc.fr/" + ppn + ".rdf"), ppn)
+                try:
+                    record = parse_sudoc(self.http.text("https://www.sudoc.fr/" + ppn + ".rdf"), ppn)
+                except Exception as exc:
+                    errors.append("RDF: " + safe_source_error(exc))
+                    if isinstance(exc, HttpError) and exc.status_code not in {404, 410}:
+                        raise PartialSearchError(list(records.values()), errors) from None
+                    continue
                 if record:
                     records[ppn] = record
+        if errors:
+            raise PartialSearchError(list(records.values()), errors)
         return list(records.values())
 
 
