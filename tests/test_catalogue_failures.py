@@ -66,7 +66,7 @@ def test_bnf_stops_after_transport_failure_without_losing_previous_records():
 
 def test_sudoc_empty_result_is_a_success():
     class HTTP:
-        def text(self, url):
+        def text(self, url, **kwargs):
             return "<sudoc><query><result/></query></sudoc>"
     assert SudocSource(HTTP()).search(Context(), ["9780306406157"]) == []
 
@@ -74,7 +74,7 @@ def test_sudoc_empty_result_is_a_success():
 def test_sudoc_keeps_records_when_another_rdf_notice_is_missing():
     class HTTP:
         calls = []
-        def text(self, url):
+        def text(self, url, **kwargs):
             self.calls.append(url)
             if "isbn2ppn" in url:
                 return "<sudoc><query><result><ppn>000000001</ppn><ppn>000000002</ppn><ppn>000000003</ppn></result></query></sudoc>"
@@ -91,7 +91,7 @@ def test_sudoc_keeps_records_when_another_rdf_notice_is_missing():
 def test_sudoc_http_403_is_visible_and_does_not_retry_other_seeds():
     class HTTP:
         calls = 0
-        def text(self, url):
+        def text(self, url, **kwargs):
             self.calls += 1
             raise HttpError("SECRET", status_code=403)
     http = HTTP()
@@ -104,7 +104,7 @@ def test_sudoc_http_403_is_visible_and_does_not_retry_other_seeds():
 
 def test_sudoc_does_not_mistake_html_for_an_empty_catalogue():
     class HTTP:
-        def text(self, url):
+        def text(self, url, **kwargs):
             return "<html><body>SECRET</body></html>"
     with pytest.raises(PartialSearchError) as caught:
         SudocSource(HTTP()).search(Context(), ["9780306406157"])

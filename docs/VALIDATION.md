@@ -63,3 +63,16 @@ python -m pytest -q
 ```
 
 La correction doit encore être reconstruite dans l'image Toolforge et vérifiée avec un nouveau pilote. Les erreurs externes des catalogues ne sont pas considérées comme résolues par les tests simulés.
+
+## Diagnostic direct et correction des catalogues, 6 octobre 2026
+
+Accès SSH réalisé depuis `Matthieu_Omen`, sous le compte outil `mesange-isbn-bot`. Le build terminé à 21:34:34 UTC et les journaux `isbn-pilot-v2` confirment l'exécution de la correction `092e564` : 20 articles analysés, 26 cas enregistrés, deux recherches incomplètes et zéro édition. Le job `isbn-hourly` est planifié. Les variables sont `BOT_MODE=DRY_RUN`, `BOT_WRITE_ENABLED=false` et `BOT_COMMUNITY_APPROVED=false`.
+
+Deux causes ont été reproduites par des appels réels depuis Toolforge :
+
+- Sudoc `isbn2ppn` renvoie HTTP 404 avec un XML `<sudoc service="isbn2ppn"><error>Aucune notice n'est associée à cette valeur ISBN</error></sudoc>` pour certains ISBN sans notice. Cette réponse précise est désormais validée comme absence de résultat ; un 404 HTML, un message de panne, un ISBN différent, une réponse XML non fiable ou un 404 RDF restent des erreurs. Les deux formes ISBN-10/13 sont recherchées sans télécharger deux fois le même PPN.
+- BnF `bib.title all "Le cheval d'orgueil"`, `maximumRecords=20`, renvoie des notices et un diagnostic SRU `131` (« erreur de traitement »). Le parseur conserve désormais les notices convertibles dans cette même réponse, avec leur avertissement.
+
+La base existante a été sauvegardée via l'API SQLite `backup` avant intervention : `backups/state-pre-catalogues-20261006T214822Z.sqlite3`. Son `PRAGMA quick_check` est `ok` ; elle contient 196 événements, 96 cas et zéro édition à cet instant. Aucune réinitialisation ni suppression des données n'a été effectuée.
+
+Tests locaux sous Python 3.13.15 : **107 tests réussis et 12 sous-tests réussis**. Les nouvelles régressions couvrent les réponses observées, la distinction panne/absence, l'isolation du cache, la conversion ISBN-10/13 et la propagation des notices BnF partielles jusqu'au rapport. La reconstruction et le pilote de cette nouvelle correction restent à vérifier après publication.

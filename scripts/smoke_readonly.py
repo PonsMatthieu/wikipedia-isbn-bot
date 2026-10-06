@@ -15,7 +15,7 @@ def main():
     checks = [
         ("MediaWiki", lambda: len(WikiClient(settings, http).category_members())),
         ("BnF", lambda: len(BnfSource(http).search(Context(), ["9782070360024"]))),
-        ("Sudoc", lambda: len(SudocSource(http).search(Context(), ["9780306406157"]))),
+        ("Sudoc", lambda: len(SudocSource(http).search(Context(), ["9782070360024"]))),
         ("Open Library", lambda: len(OpenLibrarySource(http).search(Context(), ["9780306406157"]))),
     ]
     failures = 0

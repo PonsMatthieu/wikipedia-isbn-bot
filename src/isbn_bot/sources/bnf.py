@@ -39,6 +39,11 @@ class BnfSource:
                 })
                 for record in parse_bnf(xml):
                     records[record.record_id] = record
+            except PartialSearchError as exc:
+                for record in exc.records:
+                    records[record.record_id] = record
+                kind = "ISBN" if query.startswith("bib.isbn") else "titre"
+                errors.extend(f"SRU {kind}: {error}" for error in exc.errors)
             except Exception as exc:
                 kind = "ISBN" if query.startswith("bib.isbn") else "titre"
                 errors.append(f"SRU {kind}: {safe_source_error(exc)}")
@@ -54,6 +59,7 @@ class BnfSource:
 
 def parse_bnf(xml: str) -> list[Record]:
     root = ET.fromstring(xml)
+    diagnostic_error = None
     diagnostics = [e for e in root.iter() if local_name(e.tag) == "diagnostic"]
     if diagnostics:
         codes = []
@@ -63,7 +69,7 @@ def parse_bnf(xml: str) -> list[Record]:
                     match = re.fullmatch(r"info:srw/diagnostic/\d+/(\d{1,5})", (element.text or "").strip())
                     if match:
                         codes.append(int(match[1]))
-        raise SruDiagnosticError(codes)
+        diagnostic_error = SruDiagnosticError(codes)
     records = []
     for node in root.iter():
         # Évite de confondre l'enveloppe SRU avec le record MARC interne.
@@ -107,4 +113,8 @@ def parse_bnf(xml: str) -> list[Record]:
             isbns=valid_identifiers(values("010", "a")),
             invalid_isbns=tuple(normalize_isbn(v) for v in values("010", "z")),
         ))
+    if diagnostic_error:
+        if records:
+            raise PartialSearchError(records, [safe_source_error(diagnostic_error)])
+        raise diagnostic_error
     return records

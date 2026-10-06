@@ -1,13 +1,26 @@
 import re
 
 from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 
 from ..http import HttpError
+from ..isbn import isbn10, isbn13, normalize_isbn, valid_isbn
 from ..models import Record
 from .common import PartialSearchError, local_name, safe_source_error, valid_identifiers, year
 
 
 _RDF = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}"
+
+
+def missing_isbn_response(xml: str, isbn: str) -> bool:
+    """Absence explicite observée sur isbn2ppn, jamais un 404 générique."""
+    try:
+        root = ET.fromstring(xml)
+    except (ET.ParseError, DefusedXmlException):
+        return False
+    return (root.tag == "sudoc" and root.attrib.get("service") == "isbn2ppn"
+            and len(root) == 1 and root[0].tag == "error" and len(root[0]) == 0
+            and (root[0].text or "").strip() == f"Aucune notice n'est associée à cette valeur {isbn}")
 
 
 class SudocSource:
@@ -17,15 +30,27 @@ class SudocSource:
         self.http = transport
 
     def search(self, context, seeds, raw_isbn="") -> list[Record]:
-        records, errors = {}, []
+        records, errors, fetched_ppns = {}, [], set()
         # isbn2ppn ne fait pas de recherche libre titre/auteur. Les ISBN découvertes
         # dans les autres catalogues sont également corroborées via ce service.
-        for seed in list(dict.fromkeys(seeds))[:5]:
+        identifiers = []
+        for seed in list(dict.fromkeys(normalize_isbn(s) for s in seeds))[:5]:
+            if not valid_isbn(seed):
+                continue
+            identifiers.extend((seed, isbn13(seed)))
             try:
-                xml = self.http.text("https://www.sudoc.fr/services/isbn2ppn/" + seed)
+                identifiers.append(isbn10(seed))
+            except ValueError:
+                pass  # Les ISBN 979 n'ont pas d'équivalent ISBN-10.
+        for seed in dict.fromkeys(identifiers):
+            try:
+                xml = self.http.text("https://www.sudoc.fr/services/isbn2ppn/" + seed,
+                                     not_found_validator=lambda body: missing_isbn_response(body, seed))
                 root = ET.fromstring(xml)
                 if local_name(root.tag) != "sudoc":
                     raise ValueError("Réponse isbn2ppn Sudoc invalide")
+                if any(local_name(e.tag) == "error" for e in root.iter()) and not missing_isbn_response(xml, seed):
+                    raise ValueError("Erreur isbn2ppn Sudoc")
             except Exception as exc:
                 errors.append("isbn2ppn: " + safe_source_error(exc))
                 if isinstance(exc, HttpError) and exc.status_code not in {404, 410}:
@@ -33,8 +58,10 @@ class SudocSource:
                 continue
             ppns = [(e.text or "").strip() for e in root.iter() if local_name(e.tag).lower() == "ppn"]
             for ppn in ppns[:3]:
-                if not re.fullmatch(r"\d{8}[\dXx]", ppn):
+                ppn = ppn.upper()
+                if not re.fullmatch(r"\d{8}[\dX]", ppn) or ppn in fetched_ppns:
                     continue
+                fetched_ppns.add(ppn)
                 try:
                     record = parse_sudoc(self.http.text("https://www.sudoc.fr/" + ppn + ".rdf"), ppn)
                 except Exception as exc:

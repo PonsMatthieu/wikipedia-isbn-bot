@@ -16,7 +16,9 @@ Les lectures HTTP retentent les erreurs réseau, 429 et certaines erreurs serveu
 
 Le job renvoie le code 1 lorsqu'au moins un article reste sans candidat après une erreur de catalogue. Les articles traités et leurs propositions restent dans le rapport. Les compteurs `analysed`, `failures` et `proposals` permettent de distinguer ce résultat partiel d'un arrêt avant analyse.
 
-Les journaux indiquent le catalogue, l'étape (`isbn2ppn`, `RDF` ou `SRU`) et le code HTTP ou SRU disponible. Les notices déjà obtenues dans une recherche BnF ou Sudoc restent utilisables si une requête suivante échoue ; la recherche conserve aussi son avertissement. Un résultat Sudoc XML vide est une absence de notice normale. Un HTTP 404 reste une erreur de requête visible et n'est pas assimilé automatiquement à une absence de notice.
+Les journaux indiquent le catalogue, l'étape (`isbn2ppn`, `RDF` ou `SRU`) et le code HTTP ou SRU disponible. Les notices déjà obtenues dans une recherche BnF ou Sudoc restent utilisables si une requête suivante échoue ; la recherche conserve aussi son avertissement. Un résultat Sudoc XML vide est une absence de notice normale. Le service `isbn2ppn` utilise aussi HTTP 404 pour une absence explicite : seule une réponse XML `sudoc`, service `isbn2ppn`, contenant exactement le message « Aucune notice n'est associée à cette valeur » suivi de l'ISBN interrogé, est acceptée comme résultat vide. Les autres 404, notamment ceux des notices RDF, restent visibles comme erreurs. Les ISBN-10 et ISBN-13 équivalents sont interrogés et les PPN dédupliqués.
+
+Une réponse BnF peut contenir des notices convertibles et un diagnostic SRU de remplacement pour une notice non convertible (code `131` observé). Les notices lisibles sont conservées ; le diagnostic reste dans le rapport. Une réponse contenant uniquement des diagnostics reste une recherche en erreur.
 
 Sur le bastion Toolforge, `isbn-bot` n'est pas installé par le build. Exécuter les commandes applicatives dans un job de l'image : `manage-isbn status`, `manage-isbn export` ou `scan-isbn --process-existing`.
 

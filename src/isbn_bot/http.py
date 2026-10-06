@@ -1,6 +1,7 @@
 import hashlib
 import json
 import time
+from collections.abc import Callable
 
 import requests
 
@@ -23,7 +24,8 @@ class Transport:
         self.session.headers.update({"User-Agent": settings.user_agent})
         self.sleep, self.last_request = sleep, 0.0
 
-    def request(self, method: str, url: str, *, params=None, data=None, retry: bool = True):
+    def request(self, method: str, url: str, *, params=None, data=None, retry: bool = True,
+                accepted_statuses: tuple[int, ...] = ()):
         attempts = self.settings.max_retries if retry and method == "GET" else 1
         for attempt in range(attempts):
             delay = self.settings.request_delay - (time.monotonic() - self.last_request)
@@ -45,7 +47,7 @@ class Transport:
                     retry_after = 0
                 self.sleep(min(max(retry_after, 2 ** (attempt + 1)), 60))
                 continue
-            if response.status_code >= 400:
+            if response.status_code >= 400 and response.status_code not in accepted_statuses:
                 raise HttpError(f"HTTP {response.status_code}", status_code=response.status_code)
             return response
         raise HttpError("Nombre maximal de tentatives atteint")
@@ -67,15 +69,22 @@ class Transport:
                 self.state.db.execute("INSERT OR REPLACE INTO cache VALUES (?,?,?)", (key, json.dumps(value), time.time()))
         return value
 
-    def text(self, url: str, params: dict | None = None, cache_ttl: int = 86400) -> str:
-        key = hashlib.sha256(("text:" + url + json.dumps(params or {}, sort_keys=True)).encode()).hexdigest()
+    def text(self, url: str, params: dict | None = None, cache_ttl: int = 86400, *,
+             not_found_validator: Callable[[str], bool] | None = None) -> str:
+        # Le 404 n'est acceptable qu'après validation du corps par le catalogue.
+        # Isoler ce cache pour ne pas servir un 404 à un appel HTTP ordinaire.
+        prefix = "text:validated404:" if not_found_validator else "text:"
+        key = hashlib.sha256((prefix + url + json.dumps(params or {}, sort_keys=True)).encode()).hexdigest()
         if self.state and cache_ttl:
             row = self.state.db.execute("SELECT * FROM cache WHERE key=?", (key,)).fetchone()
             if row and row["created_at"] > time.time() - cache_ttl:
                 return json.loads(row["value"])
-        response = self.request("GET", url, params=params)
+        response = self.request("GET", url, params=params,
+                                accepted_statuses=(404,) if not_found_validator else ())
         response.encoding = "utf-8"
         value = response.text
+        if response.status_code == 404 and (not not_found_validator or not not_found_validator(value)):
+            raise HttpError("HTTP 404", status_code=404)
         if self.state and cache_ttl:
             with self.state.db:
                 self.state.db.execute("INSERT OR REPLACE INTO cache VALUES (?,?,?)", (key, json.dumps(value), time.time()))
