@@ -26,9 +26,11 @@ La couverture de propositions et la précision des propositions validées sont d
 ## État de cette intervention
 
 - [x] Analyse des causes et consignation du plan.
-- [ ] Implémentation et tests.
+- [x] Implémentation et tests : 160 tests et 12 sous-tests réussis sur Toolforge, Python 3.13.
 - [ ] Publication GitHub.
 - [ ] Déploiement Toolforge.
 - [ ] Comparaison avant/après et bilan.
 
 Ce fichier est le point de reprise pour les prochaines sessions ; le compléter à chaque changement de portée ou validation.
+
+Comparaison hors ligne avant déploiement : mêmes 163 cas, mêmes notices sauvegardées, 20 → 34 remplacements proposés (+17, -3 devenus ambigus). Quatre contextes auparavant sans titre sont récupérés. Aucun appel de recherche supplémentaire dans cette mesure ; zéro modification Wikipédia. Ces nouvelles propositions restent à valider humainement.

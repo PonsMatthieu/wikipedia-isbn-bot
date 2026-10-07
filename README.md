@@ -143,6 +143,22 @@ Pour recevoir les alertes : renseigner `MAIL_HOST`, `MAIL_PORT`, `MAIL_SECURITY`
 
 ## Vérification et limites
 
+### Reprise des cas et diagnostic de couverture
+
+Les améliorations du 7 octobre sont décrites dans [docs/CHANGE_PLAN.md](docs/CHANGE_PLAN.md), point de reprise des prochaines interventions. Elles couvrent le contexte bibliographique local, les variantes numériques bornées, la recherche d’éditions et le classement des preuves par notice. Les contradictions réelles d’année, d’édition, de volume ou de langue restent des blocages.
+
+`run` retourne désormais `cases` pour les cas détectés, `candidate_cases` pour ceux avec candidats et `proposals` uniquement pour les remplacements accompagnés d’un diff. Le rapport donne la couverture, les motifs de blocage et les actions manuelles possibles ; cette couverture ne mesure pas la précision des corrections.
+
+Pour réanalyser un lot déjà traité, en conservant les identifiants et les anciennes versions :
+
+```bash
+isbn-bot reanalyze --after-event 0 --limit 20
+```
+
+Reprendre avec la valeur `next_after_event` retournée pour le lot suivant. Les événements avec une décision humaine approuvée, rejetée ou publiée sont exclus. Les versions remplacées sont archivées dans `finding_history`. Sauvegarder SQLite avant la première réanalyse. Cette commande reste une analyse sans édition Wikipédia.
+
+Les adaptateurs BnF et Open Library explorent aussi des variantes de chiffres manquants, ajoutés, inversés ou substitués, uniquement pour retrouver des ISBN attestés. Open Library recherche avec et sans auteur et explore les notices d’édition lorsque l’édition affichée ne correspond pas. Les résultats partiels sont conservés.
+
 ```bash
 python -m pytest -q
 python scripts/smoke_readonly.py
@@ -157,3 +173,4 @@ La correction entièrement automatique et le recours à un LLM/recherche web res
 Sources officielles, fonctionnement interne et procédures d'arrêt : [docs/SOURCES.md](docs/SOURCES.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 Les résultats des contrôles de livraison sont consignés dans [docs/VALIDATION.md](docs/VALIDATION.md). Le dossier téléchargeable contient aussi `examples/public-sample/`, un rapport d'analyse réelle en lecture seule ; il est exclu du dépôt public et met en évidence un cas contradictoire laissé à la revue humaine.
+
