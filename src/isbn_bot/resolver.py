@@ -202,7 +202,7 @@ def proposal_blockers(finding) -> list[str]:
             blocked.append("METADATA_MISMATCH")
         elif finding.candidates[0].score < 0.7:
             blocked.append("SCORE_BELOW_THRESHOLD")
-        else:
+        elif "Plusieurs éditions compatibles : choix humain requis" in finding.reasons:
             blocked.append("AMBIGUOUS_EDITION")
     if finding.source_errors:
         blocked.append("PARTIAL_SEARCH")

@@ -156,3 +156,41 @@ def test_summary_does_not_count_candidates_as_replacements(settings, state, page
     ids = pipeline.analyze_page(page, event)
     assert pipeline.case_metrics(ids)["proposals"] == 0
     assert pipeline.case_metrics(ids)["candidate_cases"] == 1
+
+
+def test_restricted_field_is_not_reported_as_ambiguous(page, record):
+    field = replace(extract_fields(page.wikitext)[0], editable=False, restriction="Champ réservé")
+    result = Analyzer([FakeSource([record])]).analyze(field)
+    assert result.proposed_value is None
+    assert result.blockers == ["FIELD_RESTRICTED"]
+
+
+def test_failed_minimal_diff_remains_visible(settings, state, page, record, monkeypatch):
+    def blocked(*args):
+        raise ValueError("Substitution ambiguë dans le modèle")
+    monkeypatch.setattr("isbn_bot.pipeline.replace_field", blocked)
+    pipeline = Pipeline(settings, state, FakeWiki(page), Analyzer([FakeSource([record])]))
+    event = state.add_manual_event(page.page_id, page.title)
+    ids = pipeline.analyze_page(page, event)
+    assert pipeline.case_metrics(ids)["proposals"] == 0
+    saved = json.loads(state.finding(ids[0])["finding_json"])
+    assert saved["blockers"] == ["MINIMAL_DIFF_FAILED"]
+
+
+def test_isolated_snapshot_preserves_source_and_refuses_reuse(state, settings, tmp_path):
+    import hashlib
+    from pathlib import Path
+    import runpy
+    import sqlite3
+    snapshot = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts/pilot_reanalysis.py"))["snapshot_database"]
+    state.set_meta("pilot-proof", "unchanged")
+    before = hashlib.sha256(settings.db_path.read_bytes()).hexdigest()
+    output = tmp_path / "pilot"
+    copied = snapshot(settings.db_path, output)
+    with sqlite3.connect(copied) as connection:
+        assert connection.execute("SELECT value FROM meta WHERE key='pilot-proof'").fetchone()[0] == "unchanged"
+        connection.execute("UPDATE meta SET value='pilot' WHERE key='pilot-proof'")
+    assert hashlib.sha256(settings.db_path.read_bytes()).hexdigest() == before
+    assert state.get_meta("pilot-proof") == "unchanged"
+    with pytest.raises(FileExistsError):
+        snapshot(settings.db_path, output)

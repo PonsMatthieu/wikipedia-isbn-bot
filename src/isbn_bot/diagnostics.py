@@ -18,8 +18,12 @@ def blocker_codes(finding: dict) -> list[str]:
         result.append("TYPE_EXCLUDED")
     if finding["candidates"]:
         top = finding["candidates"][0]
-        result.append("METADATA_MISMATCH" if top["mismatches"] else
-                      "SCORE_BELOW_THRESHOLD" if top["score"] < 0.7 else "AMBIGUOUS_EDITION")
+        if top["mismatches"]:
+            result.append("METADATA_MISMATCH")
+        elif top["score"] < 0.7:
+            result.append("SCORE_BELOW_THRESHOLD")
+        elif "Plusieurs éditions compatibles : choix humain requis" in finding.get("reasons", []):
+            result.append("AMBIGUOUS_EDITION")
     if finding["source_errors"]:
         result.append("PARTIAL_SEARCH")
     return result

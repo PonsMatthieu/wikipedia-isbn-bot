@@ -50,10 +50,10 @@ class BnfSource:
             except PartialSearchError as exc:
                 for record in exc.records:
                     records[record.record_id] = record
-                kind = "ISBN" if query.startswith("bib.isbn") else "titre"
+                kind = "ISBN" if "bib.isbn" in query else "titre"
                 errors.extend(f"SRU {kind}: {error}" for error in exc.errors)
             except Exception as exc:
-                kind = "ISBN" if query.startswith("bib.isbn") else "titre"
+                kind = "ISBN" if "bib.isbn" in query else "titre"
                 errors.append(f"SRU {kind}: {safe_source_error(exc)}")
                 # Le transport a déjà retenté les erreurs réseau : ne pas multiplier
                 # les appels à un service indisponible. Un diagnostic CQL reste local

@@ -38,6 +38,7 @@ class Pipeline:
                 except ValueError as exc:
                     finding.proposed_value = finding.candidate_isbn = None
                     finding.reasons.append(str(exc))
+                    finding.blockers.append("MINIMAL_DIFF_FAILED")
             ids.append(self.state.save_finding(event_id, asdict(page), finding.to_dict(), diff))
         self.state.stale_missing_findings(event_id, ids)
         if retry_needed:
