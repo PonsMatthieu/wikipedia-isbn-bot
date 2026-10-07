@@ -1,4 +1,5 @@
 import logging
+import json
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 
@@ -38,6 +39,7 @@ class Pipeline:
                     finding.proposed_value = finding.candidate_isbn = None
                     finding.reasons.append(str(exc))
             ids.append(self.state.save_finding(event_id, asdict(page), finding.to_dict(), diff))
+        self.state.stale_missing_findings(event_id, ids)
         if retry_needed:
             retry_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(timespec="seconds")
             self.state.event_status(event_id, "FAILED", "catalogue-search-incomplete", retry_at)
@@ -73,7 +75,7 @@ class Pipeline:
                 self.state.event_status(event["id"], "FAILED", type(exc).__name__, next_retry)
                 self.state.alert("ANALYSIS_FAILED", f"Page {event['page_id']} : {type(exc).__name__}")
                 log.error("Analyse échouée pour page_id=%s (%s)", event["page_id"], type(exc).__name__)
-        metrics.update(analysed=analysed, failures=failures, proposals=len(ids), wiki_edits=0)
+        metrics.update(analysed=analysed, failures=failures, wiki_edits=0, **self.case_metrics(ids))
         write_reports(self.state, self.settings.report_dir)
         try:
             metrics["email_sent"] = send_digest(self.settings, self.state, ids, metrics)
@@ -85,3 +87,44 @@ class Pipeline:
             self.state.set_meta("last_success", now())
         log.info("Fin de run : %s", metrics)
         return metrics
+
+    def case_metrics(self, ids: list[int]) -> dict:
+        rows = [self.state.finding(i) for i in dict.fromkeys(ids)]
+        proposed = [r for r in rows if json.loads(r["finding_json"]).get("proposed_value") and r["diff"]
+                    and r["status"] in {"NEEDS_REVIEW", "APPROVED"}]
+        return {"cases": len(rows), "proposals": len(proposed),
+                "proposal_pages": len({r["event_id"] for r in proposed}),
+                "candidate_cases": sum(bool(json.loads(r["finding_json"])["candidates"]) for r in rows),
+                "partial_search_cases": sum(bool(json.loads(r["finding_json"])["source_errors"]) for r in rows)}
+
+    def reanalyze(self, *, after_event: int = 0, limit: int | None = None) -> dict:
+        """Rejouer les événements existants avec une pagination explicite."""
+        if self.settings.stop_file.exists():
+            raise RuntimeError("Fichier STOP présent")
+        events = self.state.review_events(after_event, limit or self.settings.max_pages)
+        before_ids = [r[0] for e in events for r in self.state.db.execute(
+            "SELECT id FROM findings WHERE event_id=? AND status IN ('NEEDS_REVIEW','NO_CANDIDATE')", (e["id"],))]
+        before = self.case_metrics(before_ids)
+        ids, failures, analysed = [], 0, 0
+        for event in events:
+            if self.settings.stop_file.exists():
+                break
+            try:
+                page = self.wiki.page(page_id=event["page_id"])
+                if self.settings.category not in page.categories:
+                    self.state.event_status(event["id"], "RESOLVED_EXTERNALLY")
+                    self.state.stale_missing_findings(event["id"], [])
+                    continue
+                ids.extend(self.analyze_page(page, event["id"]))
+                analysed += 1
+                failures += self.state.db.execute("SELECT status FROM events WHERE id=?", (event["id"],)).fetchone()[0] == "FAILED"
+            except Exception as exc:
+                failures += 1
+                self.state.alert("REANALYSIS_FAILED", f"Page {event['page_id']} : {type(exc).__name__}")
+        metrics = {"reanalyzed": True, "analysed": analysed, "failures": failures,
+                   "before": before, **self.case_metrics(ids), "wiki_edits": 0,
+                   "next_after_event": events[-1]["id"] if events else after_event}
+        write_reports(self.state, self.settings.report_dir)
+        log.info("Fin de réanalyse : %s", metrics)
+        return metrics
+

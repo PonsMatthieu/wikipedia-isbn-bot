@@ -126,6 +126,31 @@ def candidate_seeds(value: str) -> list[str]:
     return list(dict.fromkeys(result))[:4]
 
 
+def repair_seeds(value: str, limit: int = 32) -> list[str]:
+    """Variantes à une faute, bornées ; uniquement des pistes de catalogue."""
+    s = normalize_isbn(value)
+    result = candidate_seeds(value)
+    if not re.fullmatch(r"[0-9]{8,14}[0-9X]?", s) or valid_isbn(s):
+        return result
+    variants = []
+    # Transposition, chiffre doublé/omis, puis substitution. La clé reste celle
+    # de la saisie : ne pas réparer deux erreurs à la fois.
+    if len(s) in {10, 13}:
+        variants.extend(s[:i] + s[i + 1] + s[i] + s[i + 2:] for i in range(len(s) - 1))
+    if len(s) in {11, 14}:
+        variants.extend(s[:i] + s[i + 1:] for i in range(len(s)))
+    if len(s) in {9, 12}:
+        variants.extend(s[:i] + digit + s[i:] for i in range(len(s) + 1) for digit in "0123456789")
+    if len(s) in {10, 13}:
+        variants.extend(s[:i] + digit + s[i + 1:] for i in range(len(s)) for digit in "0123456789X")
+    for value in variants:
+        if valid_isbn(value) and value not in result:
+            result.append(value)
+        if len(result) >= limit:
+            break
+    return result[:limit]
+
+
 def diagnose_isbn(value: str) -> dict:
     """Contrôles mathématiques visibles, distincts des preuves de catalogue."""
     s = normalize_isbn(value)
@@ -147,3 +172,4 @@ def diagnose_isbn(value: str) -> dict:
         "requires_catalogue_confirmation": bool(hypothesis),
         "hypothesis_sources": [],
     }
+

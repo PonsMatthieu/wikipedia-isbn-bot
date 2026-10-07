@@ -29,7 +29,10 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--process-existing", action="store_true", help="Traiter aussi un lot de pages de la liste initiale")
     page = sub.add_parser("analyze-page", help="Analyser un article précis sans édition")
     page.add_argument("title")
-    for command in (run, page):
+    reanalyze = sub.add_parser("reanalyze", help="Réanalyser un lot existant en conservant les versions précédentes")
+    reanalyze.add_argument("--after-event", type=int, default=0)
+    reanalyze.add_argument("--limit", type=int, default=None)
+    for command in (run, page, reanalyze):
         command.add_argument("--sources", nargs="+", choices=AVAILABLE_SOURCES,
                              help="Catalogues à interroger ; remplace BOT_SOURCES pour cette analyse")
     check = sub.add_parser("check-isbn", help="Vérifier clé et conversions ISBN-10/13, hors ligne")
@@ -165,6 +168,12 @@ def main(argv=None) -> int:
                         metrics = pipeline.run(process_existing=args.process_existing)
                         print_json(metrics)
                         return 1 if metrics["failures"] else 0
+                    if args.command == "reanalyze":
+                        if args.after_event < 0 or (args.limit is not None and args.limit < 1):
+                            raise ValueError("after-event doit être positif ou nul ; limit doit être positif")
+                        metrics = pipeline.reanalyze(after_event=args.after_event, limit=args.limit)
+                        print_json(metrics)
+                        return 1 if metrics["failures"] else 0
                     if args.command == "analyze-page":
                         if settings.stop_file.exists():
                             raise ValueError("Fichier STOP présent")
@@ -188,3 +197,4 @@ def main(argv=None) -> int:
     finally:
         if state is not None:
             state.close()
+

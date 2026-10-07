@@ -1,44 +1,27 @@
 """Score de classement, pas probabilité calibrée. Aucune auto-approbation."""
 import re
-import unicodedata
-from difflib import SequenceMatcher
 
-from .isbn import candidate_seeds, classify, diagnose_isbn, isbn13, normalize_isbn, valid_isbn
+from .isbn import candidate_seeds, classify, diagnose_isbn, isbn13, normalize_isbn, valid_isbn, repair_seeds
+from .matching import (normalized_text, similarity, title_similarity, author_similarity,
+                       publisher_similarity, language_code)
 from .models import Candidate, Finding, Record
 from .sources.common import PartialSearchError, safe_source_error
-
-
-def normalized_text(text: str) -> str:
-    text = unicodedata.normalize("NFKD", text.casefold())
-    text = "".join(c for c in text if not unicodedata.combining(c))
-    return " ".join(re.findall(r"[a-z0-9]+", text))
-
-
-def similarity(left: str, right: str) -> float:
-    a, b = normalized_text(left), normalized_text(right)
-    return SequenceMatcher(None, a, b).ratio() if a and b else 0.0
-
-
-def language_code(value: str) -> str:
-    code = normalized_text(value)
-    return {"fr": "fre", "francais": "fre", "fra": "fre", "en": "eng", "anglais": "eng",
-            "de": "ger", "deu": "ger", "allemand": "ger", "nl": "dut", "nld": "dut"}.get(code, code)
 
 
 def score_record(context, record: Record, raw_isbn: str) -> tuple[float, list[str]]:
     scores, mismatches = [], []
     if context.title:
-        value = similarity(context.title, record.title)
+        value = title_similarity(context.title, record.title)
         scores.append((0.35, value))
         if value < 0.65:
             mismatches.append("Titre différent")
     if context.authors:
-        values = [max((similarity(a, b) for b in record.authors), default=0) for a in context.authors]
+        values = [max((author_similarity(a, b) for b in record.authors), default=0) for a in context.authors]
         scores.append((0.25, sum(values) / len(values)))
         if record.authors and max(values) < 0.5:
             mismatches.append("Auteur différent")
     if context.publisher:
-        value = similarity(context.publisher, record.publisher)
+        value = publisher_similarity(context.publisher, record.publisher)
         scores.append((0.15, value))
         if record.publisher and value < 0.4:
             mismatches.append("Éditeur différent")
@@ -57,7 +40,8 @@ def score_record(context, record: Record, raw_isbn: str) -> tuple[float, list[st
             mismatches.append("Traducteur à confirmer")
         elif similarity(context.translator, record.translator) < 0.7:
             mismatches.append("Traducteur différent")
-    if context.language and record.language and language_code(context.language) != language_code(record.language):
+    languages = {language_code(v) for v in re.split(r"[;,]", record.language) if v.strip()}
+    if context.language and languages and language_code(context.language) not in languages:
         mismatches.append("Langue différente ou notice multilingue à vérifier")
     # La ressemblance numérique n'a qu'un poids mineur.
     scores.append((0.05, max((similarity(normalize_isbn(raw_isbn), i) for i in record.isbns), default=0)))
@@ -84,8 +68,22 @@ def rank(field, records: list[Record]) -> list[Candidate]:
                                   "score": score, "mismatches": mismatches})
             item.score = max(item.score, score)
     for item in grouped.values():
-        best = max(item.evidence, key=lambda e: e["score"])
-        item.mismatches = sorted({m for e in item.evidence for m in e["mismatches"]})
+        best = max(item.evidence, key=lambda e: (not e["mismatches"], e["score"]))
+        item.score = best["score"]
+        item.mismatches = list(best["mismatches"])
+        # Conserver toutes les réserves dans les preuves. Une notice au titre
+        # allongé/mal cataloguée ne peut plus contaminer une notice concordante.
+        item.warnings = sorted({m for e in item.evidence for m in e["mismatches"]})
+        for evidence in item.evidence:
+            record = Record(**evidence["record"])
+            same_work = title_similarity(field.context.title, record.title) >= 0.8
+            if field.context.authors and record.authors:
+                same_work &= max(author_similarity(a, b) for a in field.context.authors for b in record.authors) >= 0.6
+            if same_work:
+                item.mismatches.extend(m for m in evidence["mismatches"] if m in {
+                    "Année différente", "Édition ou volume différent", "Langue différente ou notice multilingue à vérifier"
+                })
+        item.mismatches = sorted(set(item.mismatches))
         if item.mismatches:
             item.score = min(item.score, 0.59)
         sources = sorted({e["record"]["source"] for e in item.evidence})
@@ -119,6 +117,21 @@ class Analyzer:
                 # Ni URL ni corps d'erreur fournisseur : risque de contenir une clé.
                 errors.append(f"{source.name}: {safe_source_error(exc)}")
         candidates = rank(field, records)
+        # Réparations élargies seulement si la découverte initiale n'a rien trouvé.
+        # Les adaptateurs regroupent les identifiants quand leur API le permet.
+        if not candidates:
+            extra = [s for s in repair_seeds(field.raw_value) if s not in seeds]
+            for source in sources:
+                if not extra or source.name not in {"bnf", "openlibrary"}:
+                    continue
+                try:
+                    records.extend(source.search(type(field.context)(), extra, field.raw_value))
+                except PartialSearchError as exc:
+                    records.extend(exc.records)
+                    errors.extend(f"{source.name}: {error}" for error in exc.errors)
+                except Exception as exc:
+                    errors.append(f"{source.name}: {safe_source_error(exc)}")
+            candidates = rank(field, records)
         checks = diagnose_isbn(field.raw_value)
         hypothesis = checks["checksum_only_hypothesis"]
         if hypothesis:
@@ -139,6 +152,15 @@ class Analyzer:
         if candidates and allowed and field.editable and candidates[0].score >= 0.7 and not candidates[0].mismatches:
             # Des éditions rivales restent visibles ; le choix est toujours humain.
             proposed = candidates[0].isbn
+            rivals = [c for c in candidates[1:] if c.score >= candidates[0].score - 0.04 and not c.mismatches]
+            if rivals:
+                close = set(candidate_seeds(field.raw_value))
+                preferred = [c for c in [candidates[0]] + rivals if c.isbn in close]
+                if len(preferred) == 1:
+                    proposed = preferred[0].isbn
+                else:
+                    proposed = None
+                    reasons.append("Plusieurs éditions compatibles : choix humain requis")
         if field.restriction:
             reasons.append(field.restriction)
         if classification in {"MULTIPLE_ISBN", "ISSN_AS_ISBN", "EAN_AS_ISBN", "ISMN_AS_ISBN", "PUBLISHED_BAD_ISBN"}:
@@ -147,5 +169,43 @@ class Analyzer:
             reasons.append("Aucun ISBN valide attesté par les catalogues interrogés")
         if errors:
             reasons.append("Recherche partielle : certains services ont échoué")
-        return Finding(field, classification, candidates, proposed, proposed,
-                       "NEEDS_REVIEW" if candidates else "NO_CANDIDATE", reasons, errors, checks)
+        finding = Finding(field, classification, candidates, proposed, proposed,
+                          "NEEDS_REVIEW" if candidates else "NO_CANDIDATE", reasons, list(dict.fromkeys(errors)), checks)
+        finding.blockers = proposal_blockers(finding)
+        finding.suggested_action = suggested_action(finding)
+        return finding
+
+
+def proposal_blockers(finding) -> list[str]:
+    if finding.proposed_value:
+        return []
+    blocked = []
+    if not finding.candidates:
+        blocked.append("NO_CANDIDATE")
+    if not finding.field.context.title:
+        blocked.append("MISSING_TITLE")
+    if not finding.field.editable:
+        blocked.append("FIELD_RESTRICTED")
+    if finding.error_type not in {"BAD_CHECKSUM", "EXTRA_TEXT", "UNKNOWN"}:
+        blocked.append("TYPE_EXCLUDED")
+    if finding.candidates:
+        if finding.candidates[0].mismatches:
+            blocked.append("METADATA_MISMATCH")
+        elif finding.candidates[0].score < 0.7:
+            blocked.append("SCORE_BELOW_THRESHOLD")
+        else:
+            blocked.append("AMBIGUOUS_EDITION")
+    if finding.source_errors:
+        blocked.append("PARTIAL_SEARCH")
+    return blocked
+
+
+def suggested_action(finding) -> str:
+    return {
+        "MULTIPLE_ISBN": "Séparer les ISBN et vérifier chaque édition dans le champ approprié",
+        "ISSN_AS_ISBN": "Vérifier la revue puis déplacer l'identifiant dans le champ ISSN",
+        "EAN_AS_ISBN": "Vérifier si le préfixe ISBN a été mal saisi ou s'il s'agit d'un EAN",
+        "ISMN_AS_ISBN": "Vérifier la partition puis utiliser un champ ISMN approprié",
+        "PUBLISHED_BAD_ISBN": "Vérifier l'ISBN imprimé signalé erroné dans le catalogue",
+    }.get(finding.error_type, "Examiner les notices et l'édition" if finding.candidates else "Rechercher avec le titre, l'auteur et l'éditeur de la référence")
+
