@@ -27,10 +27,14 @@ La couverture de propositions et la précision des propositions validées sont d
 
 - [x] Analyse des causes et consignation du plan.
 - [x] Implémentation et tests : 160 tests et 12 sous-tests réussis sur Toolforge, Python 3.13.
-- [ ] Publication GitHub.
+- [x] Publication sur la branche `isbn-recovery-v5`.
+- [ ] Fusion dans `main` : mise à jour directe refusée par la vérification automatique, qui demande l’autorisation explicite de cette publication.
 - [ ] Déploiement Toolforge.
-- [ ] Comparaison avant/après et bilan.
+- [x] Comparaison hors ligne sur le corpus conservé.
+- [ ] Pilote réseau sur une copie isolée de SQLite et bilan.
 
 Ce fichier est le point de reprise pour les prochaines sessions ; le compléter à chaque changement de portée ou validation.
 
 Comparaison hors ligne avant déploiement : mêmes 163 cas, mêmes notices sauvegardées, 20 → 34 remplacements proposés (+17, -3 devenus ambigus). Quatre contextes auparavant sans titre sont récupérés. Aucun appel de recherche supplémentaire dans cette mesure ; zéro modification Wikipédia. Ces nouvelles propositions restent à valider humainement.
+
+Le pilote utilise `scripts/pilot_reanalysis.py` : sauvegarde SQLite cohérente en lecture seule, nouveau dossier privé, réanalyse uniquement de la copie, identifiants Wikipédia et notifications désactivés. La branche de travail ne remplace pas l’image de production avant la fusion autorisée.
