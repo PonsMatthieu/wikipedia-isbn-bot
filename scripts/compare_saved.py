@@ -6,7 +6,10 @@ Ne modifie ni la base ni Wikipédia ; réutilise uniquement les notices sauvegar
 import json
 import sqlite3
 import sys
+from pathlib import Path
 from collections import Counter
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from isbn_bot.models import Record
 from isbn_bot.parser import extract_fields, replace_field
