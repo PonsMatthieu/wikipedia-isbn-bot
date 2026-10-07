@@ -133,9 +133,12 @@ def test_bnf_surviving_records_and_diagnostic_reach_pipeline(settings, state, pa
             return mixed_bnf_response()
     wiki = FakeWiki(page, [{"pageid": page.page_id, "title": page.title, "timestamp": page.timestamp}])
     metrics = Pipeline(settings, state, wiki, Analyzer([BnfSource(HTTP())])).run(process_existing=True)
-    assert metrics["failures"] == 0 and metrics["proposals"] == 1
+    # La fixture marque l'ISBN saisi comme publié erroné : un cas est enregistré,
+    # sans remplacement. Le compteur proposals ne doit plus compter ce cas.
+    assert metrics["failures"] == 0 and metrics["cases"] == 1 and metrics["proposals"] == 0
     assert metrics["wiki_edits"] == 0 and wiki.edits == []
     finding = state.findings()[0]
     assert '"9780306406157"' in finding["finding_json"]
     assert "bnf: SRU ISBN: SruDiagnosticError (SRU 131)" in finding["finding_json"]
     assert "SECRET" not in finding["finding_json"] and "SECRET" not in caplog.text
+

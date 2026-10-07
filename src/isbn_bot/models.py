@@ -69,6 +69,7 @@ class Candidate:
     evidence: list[dict[str, Any]] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
     mismatches: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -82,6 +83,9 @@ class Finding:
     reasons: list[str] = field(default_factory=list)
     source_errors: list[str] = field(default_factory=list)
     isbn_checks: dict[str, Any] = field(default_factory=dict)
+    blockers: list[str] = field(default_factory=list)
+    suggested_action: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+

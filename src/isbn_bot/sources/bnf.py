@@ -5,6 +5,7 @@ from defusedxml import ElementTree as ET
 from ..http import HttpError
 from ..isbn import isbn10, isbn13, normalize_isbn
 from ..models import Record
+from ..matching import title_variants
 from .common import PartialSearchError, SruDiagnosticError, cql_quote, local_name, safe_source_error, valid_identifiers, year
 
 
@@ -24,28 +25,35 @@ class BnfSource:
                 identifiers.append(isbn10(seed))
             except ValueError:
                 pass
-        queries = ["bib.isbn all " + cql_quote(s) for s in dict.fromkeys(identifiers)]
+        identifiers = list(dict.fromkeys(identifiers))
+        queries = ["bib.isbn all " + cql_quote(s) for s in identifiers]
+        if len(identifiers) > 8:
+            queries = ["(" + " or ".join("bib.isbn all " + cql_quote(s) for s in identifiers[i:i + 12]) + ")"
+                       for i in range(0, min(len(identifiers), 64), 12)]
         suspect = normalize_isbn(raw_isbn)
         if len(suspect) in {10, 13} and suspect not in seeds:
             queries.append("bib.isbn all " + cql_quote(suspect))
         if context.title:
-            queries.append("bib.title all " + cql_quote(context.title))
+            for title in title_variants(context.title)[:2]:
+                if context.authors:
+                    queries.append("(bib.title all " + cql_quote(title) + ") and (bib.author all " + cql_quote(context.authors[0]) + ")")
+                queries.append("bib.title all " + cql_quote(title))
         records, errors = {}, []
-        for query in queries[:8]:
+        for query in list(dict.fromkeys(queries))[:10]:
             try:
                 xml = self.http.text(self.endpoint, {
                     "version": "1.2", "operation": "searchRetrieve", "query": query,
-                    "recordSchema": "unimarcxchange", "maximumRecords": "20",
+                    "recordSchema": "unimarcxchange", "maximumRecords": "40",
                 })
                 for record in parse_bnf(xml):
                     records[record.record_id] = record
             except PartialSearchError as exc:
                 for record in exc.records:
                     records[record.record_id] = record
-                kind = "ISBN" if query.startswith("bib.isbn") else "titre"
+                kind = "ISBN" if "bib.isbn" in query else "titre"
                 errors.extend(f"SRU {kind}: {error}" for error in exc.errors)
             except Exception as exc:
-                kind = "ISBN" if query.startswith("bib.isbn") else "titre"
+                kind = "ISBN" if "bib.isbn" in query else "titre"
                 errors.append(f"SRU {kind}: {safe_source_error(exc)}")
                 # Le transport a déjà retenté les erreurs réseau : ne pas multiplier
                 # les appels à un service indisponible. Un diagnostic CQL reste local
@@ -118,3 +126,4 @@ def parse_bnf(xml: str) -> list[Record]:
             raise PartialSearchError(records, [safe_source_error(diagnostic_error)])
         raise diagnostic_error
     return records
+

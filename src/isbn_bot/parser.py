@@ -7,7 +7,7 @@ import mwparserfromhell
 from .models import Context, IsbnField
 
 # Réécriture supervisée uniquement pour ces modèles connus.
-_SUPPORTED = {"ouvrage", "cite book", "article", "cite journal", "isbn", "écrit"}
+_SUPPORTED = {"ouvrage", "cite book", "article", "cite journal", "isbn", "écrit", "citation", "lien web", "cite web"}
 _ISBN_PARAM = re.compile(r"isbn(?:[ _-]?[1-9]\d*)?$")
 
 
@@ -47,6 +47,57 @@ def context_from_template(template) -> Context:
     )
 
 
+def context_from_line(text: str, position: int) -> Context:
+    """Contexte local à ce champ ; ne pas prendre un livre cité plus loin."""
+    start = text.rfind("\n", 0, position) + 1
+    end = text.find("\n", position)
+    end = len(text) if end < 0 else end
+    prefix, suffix = text[start:position], text[position:end]
+    # Ne pas traverser un ISBN précédent sur une ligne avec plusieurs éditions.
+    previous = list(re.finditer(r"\{\{\s*ISBN\b.*?\}\}", prefix, re.I))
+    local = prefix[previous[-1].end():] if previous else prefix
+    italic = list(re.finditer(r"(?<!')''([^'\n]+)''(?!')", local))
+    # Les contributeurs emploient aussi *titre* dans une prose de traduction.
+    markdown = list(re.finditer(r"\*([^*\n]+)\*", local))
+    matches = sorted(italic + markdown, key=lambda m: m.end())
+    title, before, tail = "", "", ""
+    for match in reversed(matches):
+        candidate = plain(match.group(1)).strip(" ,.;")
+        if 2 <= len(candidate) <= 180 and len(candidate.split()) <= 24:
+            title, before, tail = candidate, local[:match.start()], local[match.end():]
+            break
+    if not title and re.match(r"\s*[*#]\s+", prefix):
+        # Bibliographie sans italique : « Auteur : Titre — description — ISBN ».
+        cleaned = plain(re.sub(r"^\s*[*#]+\s*", "", local))
+        pair = re.split(r"\s*:\s*", cleaned, maxsplit=1)
+        if len(pair) == 2 and pair[0] and len(pair[0]) < 100:
+            before, rest = pair
+            title = re.split(r"\s+[–—-]\s+(?:brochure|livre|ouvrage|DVD)\b", rest, maxsplit=1, flags=re.I)[0].strip(" ,.;-()")
+            tail = rest[len(title):]
+    if not title:
+        return Context()
+    author = plain(re.sub(r"^\s*[*#\d.]+\s*", "", before)).strip(" ,.;:()")
+    # Une phrase narrative ou une simple langue n'est pas un nom d'auteur.
+    if len(author.split()) > 8 or re.search(r"\b(?:française|allemande|italienne|espagnole|néerlandaise|tome|volume)\b", author, re.I):
+        author = ""
+    if not author:
+        linked = list(re.finditer(r"\b(?:de|par|by)\s+\[\[([^]\n]+)\]\]", prefix, re.I))
+        if linked:
+            person = plain("[[" + linked[-1].group(1) + "]]")
+            if 2 <= len(person.split()) <= 5:
+                author = person
+    tail = plain(tail)
+    years = re.search(r"\b(?:1[5-9]|20)\d{2}\b", tail)
+    if not years and re.match(r"\s*[*#\d.]", prefix):
+        # Dans les listes, l'année est souvent après le modèle ISBN.
+        years = re.search(r"\b(?:1[5-9]|20)\d{2}\b", suffix[:80])
+    parts = [p.strip(" ,.;()") for p in tail.split(",")]
+    publisher = next((p for p in parts if p and not re.search(r"\b(tome|volume|\d|p\.|brochure|pages)\b", p, re.I)), "")
+    volume = re.search(r"\b(?:tome|volume)\s+(\d+)", tail, re.I)
+    return Context(title=title, authors=(author,) if author else (), publisher=publisher,
+                   year=years.group() if years else "", volume=volume.group(1) if volume else "")
+
+
 def extract_fields(text: str) -> list[IsbnField]:
     code = mwparserfromhell.parse(text)
     result = []
@@ -71,18 +122,8 @@ def extract_fields(text: str) -> list[IsbnField]:
                 rendered = str(template)
                 position = text.find(rendered, position_cursor.get(rendered, 0))
                 position_cursor[rendered] = position + len(rendered)
-                prefix = text[text.rfind("\n", 0, position) + 1:position] if position >= 0 else ""
-                titles = list(re.finditer(r"(?<!')''([^'\n]+)''(?!')", prefix))
-                if titles:
-                    last = titles[-1]
-                    tail = plain(prefix[last.end():])
-                    year_match = re.search(r"\b(?:1[5-9]|20)\d{2}\b", tail)
-                    parts = [p.strip(" ,.;") for p in tail.split(",")]
-                    publisher = next((p for p in parts if p and not re.search(r"\b(tome|volume|\d|p\.)", p, re.I)), "")
-                    volume_match = re.search(r"\b(?:tome|volume)\s+(\d+)", tail, re.I)
-                    context = Context(title=plain(last.group(1)).strip(" ,.;"), publisher=publisher,
-                                      year=year_match.group() if year_match else "",
-                                      volume=volume_match.group(1) if volume_match else "")
+                if position >= 0:
+                    context = context_from_line(text, position)
         for pi, param in enumerate(template.params):
             pn = param_names[pi]
             is_isbn = bool(_ISBN_PARAM.fullmatch(pn)) or (template_name == "isbn" and pn.isdigit())
@@ -138,3 +179,4 @@ def make_diff(before: str, after: str, title: str) -> str:
         before.splitlines(keepends=True), after.splitlines(keepends=True),
         fromfile=title + " (avant)", tofile=title + " (proposition)",
     ))
+

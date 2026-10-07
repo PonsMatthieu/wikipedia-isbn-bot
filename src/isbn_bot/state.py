@@ -71,6 +71,10 @@ class State:
           id INTEGER PRIMARY KEY, code TEXT NOT NULL, message TEXT NOT NULL,
           created_at TEXT NOT NULL, sent_at TEXT
         );
+        CREATE TABLE IF NOT EXISTS finding_history (
+          id INTEGER PRIMARY KEY, finding_id INTEGER NOT NULL REFERENCES findings(id),
+          snapshot_json TEXT NOT NULL, archived_at TEXT NOT NULL
+        );
         """)
         self.db.commit()
 
@@ -136,6 +140,24 @@ class State:
         # Un crash pendant l'analyse est rejouable. Les soumissions ne le sont pas.
         return self.db.execute("SELECT * FROM events WHERE status IN ('NEW','ANALYSING') OR (status='FAILED' AND attempts<4 AND next_retry<=?) ORDER BY id LIMIT ?", (now(), limit)).fetchall()
 
+    def review_events(self, after_event: int, limit: int):
+        return self.db.execute("""SELECT e.* FROM events e JOIN memberships m ON m.event_id=e.id
+          WHERE m.active=1 AND e.id>? AND e.status IN ('NEEDS_REVIEW','NO_SUPPORTED_FINDING','FAILED')
+          AND NOT EXISTS (SELECT 1 FROM findings f WHERE f.event_id=e.id AND f.status IN
+            ('APPROVED','REJECTED','EDITED','SUBMITTING','UNKNOWN_SUBMISSION'))
+          ORDER BY e.id LIMIT ?""", (after_event, limit)).fetchall()
+
+    def archive_finding(self, row):
+        self.db.execute("INSERT INTO finding_history(finding_id,snapshot_json,archived_at) VALUES (?,?,?)",
+                        (row["id"], dumps(dict(row)), now()))
+
+    def stale_missing_findings(self, event_id: int, ids: list[int]):
+        with self.db:
+            for row in self.db.execute("SELECT * FROM findings WHERE event_id=?", (event_id,)).fetchall():
+                if row["id"] not in ids and row["status"] in {"NEEDS_REVIEW", "NO_CANDIDATE"}:
+                    self.archive_finding(row)
+                    self.db.execute("UPDATE findings SET status='STALE',updated_at=? WHERE id=?", (now(), row["id"]))
+
     def event_status(self, event_id: int, status: str, error: str | None = None, next_retry: str | None = None):
         with self.db:
             self.db.execute("UPDATE events SET status=?,last_error=?,next_retry=?,attempts=attempts+? WHERE id=?", (status, error, next_retry, int(status == "ANALYSING"), event_id))
@@ -144,9 +166,11 @@ class State:
         locator = f"t{finding['field']['template_index']}:p{finding['field']['parameter_index']}"
         with self.db:
             # Analyse interrompue : seules les propositions non approuvées peuvent être remplacées.
-            old = self.db.execute("SELECT id,status FROM findings WHERE event_id=? AND locator=?", (event_id, locator)).fetchone()
-            if old and old["status"] in {"APPROVED", "EDITED", "SUBMITTING", "UNKNOWN_SUBMISSION"}:
+            old = self.db.execute("SELECT * FROM findings WHERE event_id=? AND locator=?", (event_id, locator)).fetchone()
+            if old and old["status"] in {"APPROVED", "REJECTED", "EDITED", "SUBMITTING", "UNKNOWN_SUBMISSION"}:
                 return old["id"]
+            if old and (old["page_json"], old["finding_json"], old["diff"], old["status"]) != (dumps(page), dumps(finding), diff, finding["status"]):
+                self.archive_finding(old)
             self.db.execute("""INSERT INTO findings(event_id,locator,page_json,finding_json,diff,status,created_at,updated_at)
               VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(event_id,locator) DO UPDATE SET
               page_json=excluded.page_json,finding_json=excluded.finding_json,diff=excluded.diff,
@@ -203,3 +227,4 @@ class State:
             "last_success": self.get_meta("last_success"),
             "write_halted": self.get_meta("write_halted"),
         }
+
