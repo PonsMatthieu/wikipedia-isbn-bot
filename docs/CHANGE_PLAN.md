@@ -26,12 +26,12 @@ La couverture de propositions et la précision des propositions validées sont d
 ## État de cette intervention
 
 - [x] Analyse des causes et consignation du plan.
-- [x] Implémentation et tests : 160 tests et 12 sous-tests réussis sur Toolforge, Python 3.13.
+- [x] Implémentation et tests : 169 tests et 12 sous-tests réussis sur Toolforge, Python 3.13 ; code validé au commit `7ad1c6b`.
 - [x] Publication sur la branche `isbn-recovery-v5`.
 - [ ] Fusion dans `main` : mise à jour directe refusée par la vérification automatique, qui demande l’autorisation explicite de cette publication.
 - [ ] Déploiement Toolforge.
 - [x] Comparaison hors ligne sur le corpus conservé.
-- [ ] Pilote réseau sur une copie isolée de SQLite et bilan.
+- [x] Pilote réseau sur une copie isolée de SQLite et bilan.
 
 Ce fichier est le point de reprise pour les prochaines sessions ; le compléter à chaque changement de portée ou validation.
 
@@ -39,4 +39,26 @@ Comparaison hors ligne avant déploiement : mêmes 163 cas, mêmes notices sauve
 
 Le pilote utilise `scripts/pilot_reanalysis.py` : sauvegarde SQLite cohérente en lecture seule, nouveau dossier privé, réanalyse uniquement de la copie, identifiants Wikipédia et notifications désactivés. La branche de travail ne remplace pas l’image de production avant la fusion autorisée.
 
-Diagnostic réseau du pilote : les quatre accès publics Open Library (ISBN seul, ISBN groupés, recherche de titre, notice d’édition) échouent depuis le conteneur Toolforge par `ConnectionRefusedError`, errno 111 ; la résolution DNS fonctionne. Ce diagnostic explique un blocage d’accès au catalogue, sans déterminer son origine. La conservation des preuves en cas de panne et la pause de reprise ont été ajoutées à la portée de cette intervention. Ne pas confondre ces erreurs partielles avec des échecs complets de page.
+Diagnostic réseau du premier pilote : les quatre accès publics Open Library (ISBN seul, ISBN groupés, recherche de titre, notice d’édition) ont échoué depuis le conteneur Toolforge par `ConnectionRefusedError`, errno 111 ; la résolution DNS fonctionnait. Ce diagnostic établit un blocage d’accès au catalogue, sans déterminer son origine. La conservation des preuves en cas de panne et la pause de reprise ont été ajoutées à la portée de cette intervention. Au dernier contrôle, les quatre accès ont répondu HTTP 200. Ne pas confondre les erreurs partielles avec des échecs complets de page.
+
+## Résultats du pilote final
+
+Même lot : événements 101 à 120, 20 articles, 31 cas. Le premier essai avait obtenu 8 propositions sur 5 articles, 22 cas avec recherche partielle et 4 pages en échec pendant l’indisponibilité d’Open Library. Le rejeu final emploie le code `7ad1c6b` et une nouvelle copie du pilote, avec son cache et ses archives ; aucune base de production n’est remplacée.
+
+| Indicateur | Version initiale | Pilote final |
+|---|---:|---:|
+| Cas | 31 | 31 |
+| Remplacements proposés | 5 | 9 |
+| Articles avec proposition | 1 | 6 |
+| Cas avec candidats | 21 | 28 |
+| Cas avec erreur partielle | 2 | 2 |
+| Pages en échec | 0 | 0 |
+| Éditions Wikipédia | 0 | 0 |
+
+Couverture de propositions : 16,1 % → 29,0 % des cas. Couverture de candidats : 67,7 % → 90,3 %. Les deux erreurs finales sont les diagnostics partiels BnF SRU 131 ; deux cas conservent des notices sauvegardées explicitement signalées et réévaluées. 62 versions de cas sont archivées après les deux essais. Les propositions restent à valider humainement.
+
+Sur les 22 cas sans remplacement, les blocages se recoupent : 12 incompatibilités de métadonnées, 5 scores insuffisants, 3 absences de candidat, 4 titres manquants, 2 champs restreints, 3 types exclus et 2 ambiguïtés d’édition. Parmi les incompatibilités : 7 éditeurs, 7 auteurs, 6 années, 5 titres, 1 langue. Les diagnostics testés n’attribuent aucun de ces écarts d’éditeur à une ville prise pour un éditeur ; aucun score insuffisant n’est un titre exact avec une variante de faute numérique attestée.
+
+Le seuil de 75 % n’est pas atteint. La priorité suivante est de confronter les 12 incompatibilités et les quatre titres manquants à des corrections manuelles de référence, pour distinguer alias, extraction imparfaite et édition réellement différente. Cela permettra des changements ciblés du classement. Les trois cas sans candidat justifient ensuite une recherche élargie ; les types/champs restreints nécessitent leurs propres propositions d’action. Ne pas diminuer tous les seuils pour gonfler le compteur.
+
+Vérification finale de la production : 163 cas, 20 propositions, 196 événements, zéro édition ; le déploiement horaire reste sur `c5adb58`. Les changements sont préparés dans la [PR nº 1](https://github.com/PonsMatthieu/wikipedia-isbn-bot/pull/1). Après autorisation explicite : fusionner, construire l’image Toolforge, sauvegarder SQLite puis réanalyser les événements existants par lots. Rester DRY_RUN et ne pas remettre la base à zéro.
