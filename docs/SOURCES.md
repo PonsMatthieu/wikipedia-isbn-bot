@@ -9,6 +9,7 @@ Consultées le 5 octobre 2026. Les règles communautaires et commandes de Toolfo
 - [ABES : exemple isbn2ppn et RDF](https://punktokomo.abes.fr/2014/02/18/domybiblio/).
 - [Open Library : API de recherche et distinction Work/Edition](https://openlibrary.org/dev/docs/api/search).
 - [Google Books : API](https://developers.google.com/books/docs/v1/using).
+- [Agence internationale ISBN : ISBN et clé de contrôle](https://www.isbn-international.org/index.php/content/what-isbn/10), [absence de conversion des ISBN 979 en ISBN-10](https://www.isbn-international.org/node/331) et [manuel international](https://www.isbn-international.org/content/isbn-users-manual/29). Consultés le 7 octobre 2026, ainsi que la documentation Google Books.
 - [Toolforge : démarrage](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Quickstart), [Build Service](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Building_container_images), [jobs](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Jobs_framework), [Python](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Python), [variables d'environnement](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Envvars).
 
 Spécification fournie par l'opérateur : `Wikipedia_ISBN_Bot_Documentation.pdf`. Les schémas et textes de test dans `tests/fixtures` et `examples/demo` sont fictifs ; ils ne sont pas des notices bibliographiques certifiées.

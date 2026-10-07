@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-05T09:40:20+00:00",
+  "generated_at": "2026-10-07T08:12:11+00:00",
   "demo": true,
   "stats": {
     "events": {
@@ -59,7 +59,8 @@
             "isbn": "9780306406157",
             "mismatches": [],
             "reasons": [
-              "ISBN explicitement présent dans : bnf"
+              "ISBN explicitement présent dans : bnf",
+              "Même corps numérique ; clé recalculée de 8 à 7 ; édition exacte à vérifier"
             ],
             "score": 0.9957
           }
@@ -85,6 +86,29 @@
           "restriction": "",
           "template_index": 0,
           "template_name": "ouvrage"
+        },
+        "isbn_checks": {
+          "checksum_matches": false,
+          "checksum_only_hypothesis": "9780306406157",
+          "classification": "BAD_CHECKSUM",
+          "equivalents": {},
+          "expected_check_digit": "7",
+          "format": "ISBN-13",
+          "hypothesis_equivalents": {
+            "isbn10": "0306406152",
+            "isbn13": "9780306406157"
+          },
+          "hypothesis_sources": [
+            "bnf"
+          ],
+          "normalized": "9780306406158",
+          "requires_catalogue_confirmation": true,
+          "search_seeds": [
+            "9780306406157",
+            "0306406152"
+          ],
+          "supplied_check_digit": "8",
+          "valid": false
         },
         "proposed_value": "9780306406157",
         "reasons": [],

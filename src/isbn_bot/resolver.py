@@ -3,7 +3,7 @@ import re
 import unicodedata
 from difflib import SequenceMatcher
 
-from .isbn import candidate_seeds, classify, isbn13, normalize_isbn, valid_isbn
+from .isbn import candidate_seeds, classify, diagnose_isbn, isbn13, normalize_isbn, valid_isbn
 from .models import Candidate, Finding, Record
 from .sources.common import PartialSearchError, safe_source_error
 
@@ -119,6 +119,17 @@ class Analyzer:
                 # Ni URL ni corps d'erreur fournisseur : risque de contenir une clé.
                 errors.append(f"{source.name}: {safe_source_error(exc)}")
         candidates = rank(field, records)
+        checks = diagnose_isbn(field.raw_value)
+        hypothesis = checks["checksum_only_hypothesis"]
+        if hypothesis:
+            canonical = isbn13(hypothesis)
+            matching = next((c for c in candidates if c.isbn == canonical), None)
+            if matching:
+                checks["hypothesis_sources"] = sorted({e["record"]["source"] for e in matching.evidence})
+                matching.reasons.append(
+                    "Même corps numérique ; clé recalculée de " + checks["supplied_check_digit"] +
+                    " à " + checks["expected_check_digit"] + " ; édition exacte à vérifier"
+                )
         reasons = []
         if any(normalize_isbn(field.raw_value) in r.invalid_isbns for r in records):
             classification = "PUBLISHED_BAD_ISBN"
@@ -137,4 +148,4 @@ class Analyzer:
         if errors:
             reasons.append("Recherche partielle : certains services ont échoué")
         return Finding(field, classification, candidates, proposed, proposed,
-                       "NEEDS_REVIEW" if candidates else "NO_CANDIDATE", reasons, errors)
+                       "NEEDS_REVIEW" if candidates else "NO_CANDIDATE", reasons, errors, checks)

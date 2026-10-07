@@ -4,6 +4,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+AVAILABLE_SOURCES = ("bnf", "sudoc", "openlibrary", "googlebooks")
 
 def boolean(name: str, default: bool = False) -> bool:
     value = os.getenv(name, str(default)).strip().lower()
@@ -64,7 +65,7 @@ class Settings:
         if mode not in {"DRY_RUN", "REVIEW_ONLY"}:
             raise ValueError("BOT_MODE accepte DRY_RUN ou REVIEW_ONLY dans cette V1")
         sources = tuple(s.strip() for s in os.getenv("BOT_SOURCES", "bnf,sudoc,openlibrary").split(",") if s.strip())
-        if not sources or set(sources) - {"bnf", "sudoc", "openlibrary", "googlebooks"}:
+        if not sources or set(sources) - set(AVAILABLE_SOURCES):
             raise ValueError("BOT_SOURCES doit contenir bnf, sudoc, openlibrary et/ou googlebooks")
         settings = cls(
             data_dir=root,
@@ -79,7 +80,7 @@ class Settings:
             bot_login=os.getenv("WIKI_BOT_LOGIN", ""),
             bot_password=os.getenv("WIKI_BOT_PASSWORD", ""),
             bot_account=os.getenv("WIKI_BOT_ACCOUNT", ""),
-            sources=sources,
+            sources=tuple(dict.fromkeys(sources)),
             google_key=os.getenv("GOOGLE_BOOKS_API_KEY", ""),
             max_pages=int(os.getenv("BOT_MAX_PAGES", "20")),
             max_edits=int(os.getenv("BOT_MAX_EDITS", "3")),

@@ -4,6 +4,7 @@ from isbn_bot.http import Transport
 from isbn_bot.models import Context
 from isbn_bot.sources.bnf import BnfSource
 from isbn_bot.sources.openlibrary import OpenLibrarySource
+from isbn_bot.sources.googlebooks import GoogleBooksSource
 from isbn_bot.sources.sudoc import SudocSource
 from isbn_bot.sources.common import safe_source_error
 from isbn_bot.wiki import WikiClient
@@ -19,6 +20,11 @@ def main():
         ("Open Library", lambda: len(OpenLibrarySource(http).search(Context(), ["9780306406157"]))),
     ]
     failures = 0
+    if settings.google_key.strip():
+        checks.append(("Google Books", lambda: len(GoogleBooksSource(http, settings.google_key).search(Context(), ["9780306406157"]))))
+    elif "googlebooks" in settings.sources:
+        print("Google Books: NON CONFIGURÉ (GOOGLE_BOOKS_API_KEY requis)")
+        failures += 1
     for name, call in checks:
         try:
             print(f"{name}: OK ({call()} résultat(s))")

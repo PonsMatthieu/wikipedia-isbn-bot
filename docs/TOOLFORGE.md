@@ -96,6 +96,25 @@ toolforge envvars create BOT_MAX_PAGES 20
 toolforge envvars create BOT_SOURCES bnf,sudoc,openlibrary
 ```
 
+### Option Google Books et contrôles ISBN
+
+Google Books est un fournisseur optionnel. Créer `GOOGLE_BOOKS_API_KEY` dans les variables privées du tool, puis ajouter `googlebooks` à `BOT_SOURCES`. Ne pas inscrire la clé dans le dépôt ni la copier dans les rapports. Pour un outil déjà configuré, utiliser la commande de mise à jour des variables existantes plutôt que recréer `BOT_SOURCES`.
+
+Après reconstruction de l'image contenant la mise à jour du 7 octobre, ces contrôles n'interrogent aucun catalogue et ne modifient pas Wikipédia :
+
+```bash
+toolforge jobs run isbn-sources --image tool-mesange-isbn-bot/tool-mesange-isbn-bot:latest --command 'manage-isbn sources' --mount all --filelog --wait
+toolforge jobs run isbn-check --image tool-mesange-isbn-bot/tool-mesange-isbn-bot:latest --command 'manage-isbn check-isbn 9780306406158' --mount all --filelog --wait
+```
+
+`sources` affiche uniquement si une clé est configurée. `check-isbn` affiche la clé attendue (`7` dans cet exemple), l'hypothèse de correction et l'équivalent ISBN-10 (`0306406152`). Un pilote avec Google Books se lance après configuration de sa clé :
+
+```bash
+toolforge jobs run isbn-google-pilot --image tool-mesange-isbn-bot/tool-mesange-isbn-bot:latest --command 'scan-isbn --process-existing --sources bnf sudoc openlibrary googlebooks' --mount all --filelog --wait 3300
+```
+
+Le rapport conserve les notices trouvées avant un échec Google Books et distingue les hypothèses mathématiques des identifiants attestés. La reconstruction et la validation réelles de cette nouvelle version restent à confirmer ; la validation du 6 octobre concerne la correction des catalogues précédente.
+
 Un compte de bot n'est pas nécessaire pour lire les API publiques. Initialiser puis lancer le premier snapshot :
 
 ```bash

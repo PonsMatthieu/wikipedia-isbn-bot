@@ -3,12 +3,14 @@ import json
 import logging
 import os
 import sys
+from dataclasses import replace
 from pathlib import Path
 
-from .config import Settings
+from .config import AVAILABLE_SOURCES, Settings
 from .demo import run_demo
 from .editor import Editor, approve_finding, content_hash
 from .http import Transport
+from .isbn import diagnose_isbn
 from .notifications import send_digest
 from .pipeline import Pipeline
 from .reports import write_reports
@@ -27,6 +29,12 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--process-existing", action="store_true", help="Traiter aussi un lot de pages de la liste initiale")
     page = sub.add_parser("analyze-page", help="Analyser un article précis sans édition")
     page.add_argument("title")
+    for command in (run, page):
+        command.add_argument("--sources", nargs="+", choices=AVAILABLE_SOURCES,
+                             help="Catalogues à interroger ; remplace BOT_SOURCES pour cette analyse")
+    check = sub.add_parser("check-isbn", help="Vérifier clé et conversions ISBN-10/13, hors ligne")
+    check.add_argument("value")
+    sub.add_parser("sources", help="Afficher les catalogues disponibles et leur configuration, sans clé secrète")
     listing = sub.add_parser("list", help="Liste des propositions")
     listing.add_argument("--status", default="")
     show = sub.add_parser("show", help="Afficher preuves et diff")
@@ -61,15 +69,26 @@ def main(argv=None) -> int:
     args = parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     os.umask(0o077)
+    if args.command == "check-isbn":
+        print_json(diagnose_isbn(args.value))
+        return 0
     if args.command == "demo":
         json_path, html_path = run_demo(args.output)
         print_json({"demo": True, "report_json": str(json_path), "report_html": str(html_path), "wiki_edits": 0})
         return 0
     try:
         settings = Settings.from_env(args.env)
+        if getattr(args, "sources", None):
+            settings = replace(settings, sources=tuple(dict.fromkeys(args.sources)))
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+    if args.command == "sources":
+        print_json([{"source": name, "enabled": name in settings.sources,
+                     "requires_api_key": name == "googlebooks",
+                     "configured": name != "googlebooks" or bool(settings.google_key.strip())}
+                    for name in AVAILABLE_SOURCES])
+        return 0
     state = None
     try:
         with run_lock(settings.data_dir):

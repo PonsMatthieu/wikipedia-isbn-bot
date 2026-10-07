@@ -36,12 +36,12 @@ def test_classification(raw, expected):
 
 
 def test_checksum_is_only_a_seed():
-    assert candidate_seeds("9780306406158") == ["9780306406157"]
+    assert candidate_seeds("9780306406158") == ["9780306406157", "0306406152"]
 
 
 def test_a_year_cannot_consume_the_start_of_a_13_digit_isbn():
     assert classify("2025  978-2-07-523807-6") == "EXTRA_TEXT"
-    assert candidate_seeds("2025  978-2-07-523807-6") == ["9782075238076"]
+    assert candidate_seeds("2025  978-2-07-523807-6") == ["9782075238076", "2075238073"]
     assert isbn10("9780306406157") == "0306406152"
 
 
