@@ -81,6 +81,14 @@ def test_math_variants_without_a_notice_do_not_propose(page):
     assert Analyzer([FakeSource([])]).analyze(field).proposed_value is None
 
 
+def test_exact_title_and_attested_checksum_allow_sparse_reference(record):
+    field = extract_fields("{{Ouvrage|titre=Livre test|isbn=9780306406158}}")[0]
+    assert Analyzer([FakeSource([record])]).analyze(field).proposed_value == "9780306406157"
+    # Un autre ISBN du même titre ne bénéficie pas de cette règle.
+    other = replace(record, isbns=("9780743273565",))
+    assert Analyzer([FakeSource([other])]).analyze(field).proposed_value is None
+
+
 def test_openlibrary_title_only_fallback_and_matching_edition():
     class HTTP:
         calls = []

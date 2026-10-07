@@ -80,11 +80,17 @@ def context_from_line(text: str, position: int) -> Context:
     # Une phrase narrative ou une simple langue n'est pas un nom d'auteur.
     if len(author.split()) > 8 or re.search(r"\b(?:française|allemande|italienne|espagnole|néerlandaise|tome|volume)\b", author, re.I):
         author = ""
+    if not author:
+        linked = list(re.finditer(r"\b(?:de|par|by)\s+\[\[([^]\n]+)\]\]", prefix, re.I))
+        if linked:
+            person = plain("[[" + linked[-1].group(1) + "]]")
+            if 2 <= len(person.split()) <= 5:
+                author = person
     tail = plain(tail)
     years = re.search(r"\b(?:1[5-9]|20)\d{2}\b", tail)
-    if not years:
+    if not years and re.match(r"\s*[*#\d.]", prefix):
         # Dans les listes, l'année est souvent après le modèle ISBN.
-        years = re.search(r"\b(?:1[5-9]|20)\d{2}\b", suffix)
+        years = re.search(r"\b(?:1[5-9]|20)\d{2}\b", suffix[:80])
     parts = [p.strip(" ,.;()") for p in tail.split(",")]
     publisher = next((p for p in parts if p and not re.search(r"\b(tome|volume|\d|p\.|brochure|pages)\b", p, re.I)), "")
     volume = re.search(r"\b(?:tome|volume)\s+(\d+)", tail, re.I)

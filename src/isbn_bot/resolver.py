@@ -1,7 +1,7 @@
 """Score de classement, pas probabilité calibrée. Aucune auto-approbation."""
 import re
 
-from .isbn import candidate_seeds, classify, diagnose_isbn, isbn13, normalize_isbn, valid_isbn, repair_seeds
+from .isbn import candidate_seeds, classify, diagnose_isbn, isbn13, normalize_isbn, valid_isbn, repair_seeds, checksum_hypothesis
 from .matching import (normalized_text, similarity, title_similarity, author_similarity,
                        publisher_similarity, language_code)
 from .models import Candidate, Finding, Record
@@ -49,15 +49,24 @@ def score_record(context, record: Record, raw_isbn: str) -> tuple[float, list[st
     if not context.title:
         score = min(score, 0.35)
     elif not context.authors and not context.publisher and not context.year:
-        score = min(score, 0.65)
+        hypothesis = checksum_hypothesis(raw_isbn)
+        attested = hypothesis and any(valid_isbn(i) and isbn13(i) == isbn13(hypothesis) for i in record.isbns)
+        # Un titre exact et une correction de clé attestée désignent une édition,
+        # même si la citation n'a pas renseigné les autres métadonnées.
+        score = min(score, 0.85 if attested and title_similarity(context.title, record.title) >= 0.95 else 0.65)
     if mismatches:
         score = min(score, 0.59)
     return round(score, 4), mismatches
 
 
 def rank(field, records: list[Record]) -> list[Candidate]:
-    grouped = {}
+    grouped, seen = {}, set()
     for record in records:
+        signature = (record.source, record.record_id, record.title, tuple(record.authors), record.publisher,
+                     record.year, record.edition, record.volume, record.language, tuple(record.isbns))
+        if signature in seen:
+            continue
+        seen.add(signature)
         score, mismatches = score_record(field.context, record, field.raw_value)
         for value in record.isbns:
             if not valid_isbn(value):
@@ -119,7 +128,7 @@ class Analyzer:
         candidates = rank(field, records)
         # Réparations élargies seulement si la découverte initiale n'a rien trouvé.
         # Les adaptateurs regroupent les identifiants quand leur API le permet.
-        if not candidates:
+        if not any(c.score >= 0.7 and not c.mismatches for c in candidates):
             extra = [s for s in repair_seeds(field.raw_value) if s not in seeds]
             for source in sources:
                 if not extra or source.name not in {"bnf", "openlibrary"}:
