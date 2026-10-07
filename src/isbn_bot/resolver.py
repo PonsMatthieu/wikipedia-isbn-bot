@@ -106,10 +106,16 @@ class Analyzer:
     def __init__(self, sources):
         self.sources = sources
 
-    def analyze(self, field) -> Finding:
+    def analyze(self, field, *, saved_records=()) -> Finding:
         classification = classify(field.raw_value)
         seeds = candidate_seeds(field.raw_value)
         records, errors = [], []
+        reused_sources = set()
+        def reuse_failed_source(source):
+            retained = [r for r in saved_records if r.source == source.name]
+            if retained:
+                records.extend(retained)
+                reused_sources.add(source.name)
         # Découverte d'abord ; Sudoc confirme ensuite les candidats réellement trouvés.
         sources = sorted(self.sources, key=lambda s: s.name == "sudoc")
         for source in sources:
@@ -122,9 +128,11 @@ class Analyzer:
             except PartialSearchError as exc:
                 records.extend(exc.records)
                 errors.extend(f"{source.name}: {error}" for error in exc.errors)
+                reuse_failed_source(source)
             except Exception as exc:
                 # Ni URL ni corps d'erreur fournisseur : risque de contenir une clé.
                 errors.append(f"{source.name}: {safe_source_error(exc)}")
+                reuse_failed_source(source)
         candidates = rank(field, records)
         # Réparations élargies seulement si la découverte initiale n'a rien trouvé.
         # Les adaptateurs regroupent les identifiants quand leur API le permet.
@@ -138,8 +146,10 @@ class Analyzer:
                 except PartialSearchError as exc:
                     records.extend(exc.records)
                     errors.extend(f"{source.name}: {error}" for error in exc.errors)
+                    reuse_failed_source(source)
                 except Exception as exc:
                     errors.append(f"{source.name}: {safe_source_error(exc)}")
+                    reuse_failed_source(source)
             candidates = rank(field, records)
         checks = diagnose_isbn(field.raw_value)
         hypothesis = checks["checksum_only_hypothesis"]
@@ -153,6 +163,8 @@ class Analyzer:
                     " à " + checks["expected_check_digit"] + " ; édition exacte à vérifier"
                 )
         reasons = []
+        if reused_sources:
+            reasons.append("Notices sauvegardées conservées pendant une recherche partielle : " + ", ".join(sorted(reused_sources)))
         if any(normalize_isbn(field.raw_value) in r.invalid_isbns for r in records):
             classification = "PUBLISHED_BAD_ISBN"
             reasons.append("Une notice contient cet ISBN comme erroné : conserver/vérifier manuellement")

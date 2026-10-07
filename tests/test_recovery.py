@@ -194,3 +194,77 @@ def test_isolated_snapshot_preserves_source_and_refuses_reuse(state, settings, t
     assert state.get_meta("pilot-proof") == "unchanged"
     with pytest.raises(FileExistsError):
         snapshot(settings.db_path, output)
+
+
+class UnavailableSource:
+    name = "bnf"
+    def search(self, *args):
+        from isbn_bot.http import HttpError
+        raise HttpError("Service indisponible", kind="ConnectionError")
+
+
+def test_saved_catalogue_evidence_survives_provider_outage(settings, state, page, record):
+    wiki = FakeWiki(page, [{"pageid": page.page_id, "title": page.title, "timestamp": page.timestamp}])
+    pipeline = Pipeline(settings, state, wiki, Analyzer([FakeSource([record])]))
+    pipeline.run(process_existing=True)
+    pipeline.analyzer = Analyzer([UnavailableSource()])
+    metrics = pipeline.reanalyze()
+    assert metrics["proposals"] == 1 and metrics["partial_search_cases"] == 1
+    saved = json.loads(state.finding(1)["finding_json"])
+    assert any("Notices sauvegardées" in reason for reason in saved["reasons"])
+    assert wiki.edits == []
+
+
+@pytest.mark.parametrize("replacement", [
+    ("978-0-306-40615-8", "978-0-306-40616-8"),
+    ("année=2004", "année=2021"),
+    ("titre=Livre test", "titre=Tout autre ouvrage"),
+])
+def test_outage_does_not_reuse_evidence_without_matching_current_reference(settings, state, page, record, replacement):
+    wiki = FakeWiki(page, [{"pageid": page.page_id, "title": page.title, "timestamp": page.timestamp}])
+    pipeline = Pipeline(settings, state, wiki, Analyzer([FakeSource([record])]))
+    pipeline.run(process_existing=True)
+    wiki.current = replace(page, wikitext=page.wikitext.replace(*replacement), revision_id=101)
+    pipeline.analyzer = Analyzer([UnavailableSource()])
+    assert pipeline.reanalyze()["proposals"] == 0
+
+
+def test_healthy_empty_search_is_not_replaced_by_old_evidence(settings, state, page, record):
+    wiki = FakeWiki(page, [{"pageid": page.page_id, "title": page.title, "timestamp": page.timestamp}])
+    pipeline = Pipeline(settings, state, wiki, Analyzer([FakeSource([record])]))
+    pipeline.run(process_existing=True)
+    pipeline.analyzer = Analyzer([FakeSource([])])
+    metrics = pipeline.reanalyze()
+    assert metrics["candidate_cases"] == 0 and metrics["proposals"] == 0
+    # Un échec ultérieur peut retrouver les notices dans l'historique conservé.
+    pipeline.analyzer = Analyzer([UnavailableSource()])
+    assert pipeline.reanalyze()["proposals"] == 1
+
+
+def test_unavailable_host_pause_preserves_cache_and_other_catalogues(settings, state):
+    import requests
+    from isbn_bot.http import HttpError, Transport
+    from test_sources_wiki_http import Response
+    class Session:
+        headers = {}
+        calls = 0
+        def request(self, *args, **kwargs):
+            self.calls += 1
+            if self.calls == 2:
+                raise requests.ConnectionError("private query")
+            return Response({"ok": True})
+    clock = [0.0]
+    session = Session()
+    http = Transport(replace(settings, max_retries=1), state, session=session,
+                     sleep=lambda _: None, clock=lambda: clock[0])
+    assert http.json("https://openlibrary.org/cached")["ok"]
+    with pytest.raises(HttpError):
+        http.json("https://openlibrary.org/unavailable")
+    assert http.json("https://openlibrary.org/cached")["ok"]
+    with pytest.raises(HttpError) as caught:
+        http.json("https://openlibrary.org/another-query")
+    assert caught.value.cooldown and session.calls == 2
+    assert http.json("https://catalogue.bnf.fr/available")["ok"]
+    clock[0] = 61
+    assert http.json("https://openlibrary.org/recovered")["ok"]
+    assert session.calls == 4

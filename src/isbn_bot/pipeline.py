@@ -4,6 +4,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 
 from .isbn import classify
+from .models import Record
 from .notifications import send_digest
 from .parser import extract_fields, make_diff, replace_field
 from .reports import write_reports
@@ -16,6 +17,24 @@ class Pipeline:
     def __init__(self, settings, state, wiki, analyzer):
         self.settings, self.state, self.wiki, self.analyzer = settings, state, wiki, analyzer
 
+    def saved_records(self, event_id, field):
+        row = self.state.db.execute("SELECT * FROM findings WHERE event_id=? AND locator=?",
+                                    (event_id, field.locator)).fetchone()
+        if row is None:
+            return []
+        snapshots = [dict(row)] + [json.loads(r[0]) for r in self.state.db.execute(
+            "SELECT snapshot_json FROM finding_history WHERE finding_id=? ORDER BY id DESC LIMIT 5", (row["id"],))]
+        records = {}
+        for snapshot in snapshots:
+            finding = json.loads(snapshot["finding_json"])
+            if finding["field"]["raw_value"] != field.raw_value:
+                continue
+            for candidate in finding["candidates"]:
+                for evidence in candidate["evidence"]:
+                    data = evidence["record"]
+                    records[json.dumps(data, sort_keys=True)] = Record(**data)
+        return list(records.values())
+
     def analyze_page(self, page, event_id: int) -> list[int]:
         if page.namespace != 0:
             self.state.event_status(event_id, "OUT_OF_SCOPE")
@@ -25,7 +44,7 @@ class Pipeline:
         for field in fields:
             if self.settings.stop_file.exists():
                 raise RuntimeError("Fichier STOP présent")
-            finding = self.analyzer.analyze(field)
+            finding = self.analyzer.analyze(field, saved_records=self.saved_records(event_id, field))
             if finding.source_errors:
                 log.warning("Recherche catalogue partielle pour page_id=%s : %s",
                             page.page_id, "; ".join(finding.source_errors))

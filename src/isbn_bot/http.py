@@ -2,6 +2,7 @@ import hashlib
 import json
 import time
 from collections.abc import Callable
+from urllib.parse import urlsplit
 
 import requests
 
@@ -10,32 +11,43 @@ from .state import State
 
 
 class HttpError(RuntimeError):
-    def __init__(self, message: str, *, status_code: int | None = None, kind: str | None = None):
+    def __init__(self, message: str, *, status_code: int | None = None, kind: str | None = None,
+                 cooldown: bool = False):
         super().__init__(message)
         self.status_code = status_code
         self.kind = kind
+        self.cooldown = cooldown
 
 
 class Transport:
     """Sessions séparées des comptes wiki. Retente uniquement les lectures HTTP."""
-    def __init__(self, settings: Settings, state: State | None = None, session=None, sleep=time.sleep):
+    def __init__(self, settings: Settings, state: State | None = None, session=None, sleep=time.sleep,
+                 clock=time.monotonic):
         self.settings, self.state = settings, state
         self.session = session or requests.Session()
         self.session.headers.update({"User-Agent": settings.user_agent})
-        self.sleep, self.last_request = sleep, 0.0
+        self.sleep, self.clock, self.last_request = sleep, clock, 0.0
+        self.cooldowns = {}
 
     def request(self, method: str, url: str, *, params=None, data=None, retry: bool = True,
                 accepted_statuses: tuple[int, ...] = ()):
+        host = urlsplit(url).hostname or ""
+        deadline, status, kind = self.cooldowns.get(host, (0, None, None))
+        if method == "GET" and deadline > self.clock():
+            raise HttpError("Reprise différée après indisponibilité du service",
+                            status_code=status, kind=kind, cooldown=True)
         attempts = self.settings.max_retries if retry and method == "GET" else 1
         for attempt in range(attempts):
-            delay = self.settings.request_delay - (time.monotonic() - self.last_request)
+            delay = self.settings.request_delay - (self.clock() - self.last_request)
             if delay > 0:
                 self.sleep(delay)
-            self.last_request = time.monotonic()
+            self.last_request = self.clock()
             try:
                 response = self.session.request(method, url, params=params, data=data, timeout=self.settings.timeout)
             except requests.RequestException as exc:
                 if attempt + 1 == attempts:
+                    if method == "GET":
+                        self.cooldowns[host] = (self.clock() + 60, None, type(exc).__name__)
                     # Ne pas exposer l'URL : elle peut contenir une clé API.
                     raise HttpError(type(exc).__name__ + " pendant une requête HTTP", kind=type(exc).__name__) from None
                 self.sleep(min(2 ** (attempt + 1), 32))
@@ -48,7 +60,10 @@ class Transport:
                 self.sleep(min(max(retry_after, 2 ** (attempt + 1)), 60))
                 continue
             if response.status_code >= 400 and response.status_code not in accepted_statuses:
+                if method == "GET" and response.status_code in {429, 500, 502, 503, 504}:
+                    self.cooldowns[host] = (self.clock() + 60, response.status_code, None)
                 raise HttpError(f"HTTP {response.status_code}", status_code=response.status_code)
+            self.cooldowns.pop(host, None)
             return response
         raise HttpError("Nombre maximal de tentatives atteint")
 
@@ -89,3 +104,4 @@ class Transport:
             with self.state.db:
                 self.state.db.execute("INSERT OR REPLACE INTO cache VALUES (?,?,?)", (key, json.dumps(value), time.time()))
         return value
+
